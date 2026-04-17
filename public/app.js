@@ -1329,20 +1329,22 @@ window.openHardwareLibrary = async () => {
         let html = '';
         components.forEach(comp => {
             // Encode safely for DOM passing
+            const compLabel = comp.display_name || comp.label || 'Unknown';
+            const compId = comp.id || comp.device_id || compLabel.toLowerCase().replace(/\s+/g, '-');
             const notesEncoded = encodeURIComponent(comp.notes || '');
-            const idEncoded = encodeURIComponent(comp.id);
-            const nameEncoded = encodeURIComponent(comp.display_name);
-            const typeEncoded = encodeURIComponent(comp.device_type);
+            const idEncoded = encodeURIComponent(compId);
+            const nameEncoded = encodeURIComponent(compLabel);
+            const typeEncoded = encodeURIComponent(comp.device_type || 'Unknown');
             
             // Re-use our addToSession function internally by fabricating an item
             const fabricatedItem = encodeURIComponent(JSON.stringify({
-                device_id: comp.id,
-                label: comp.display_name,
+                device_id: compId,
+                label: compLabel,
                 notes: comp.notes || 'Manually added from Registry'
             }));
 
             // Check if already in active session
-            const inSession = window.arSession.some(i => i.label === comp.display_name);
+            const inSession = window.arSession.some(i => i.label === compLabel);
             const btnText = inSession ? "✓ Added" : "+ Add to Session";
             const btnDisabled = inSession ? "disabled" : "";
             const btnStyle = inSession ? "background-color: rgba(0,255,100,0.1); color: #88ffba; border: 1px solid #88ffba;" : "border-color: #50fa7b; color: #50fa7b;";
@@ -1350,8 +1352,8 @@ window.openHardwareLibrary = async () => {
             html += `
                 <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="flex: 1;">
-                        <div style="font-weight: 600; font-size: 1.1em; color: #ececec; margin-bottom: 4px;">${comp.display_name}</div>
-                        <div style="font-size: 0.8em; color: #a3a3a3; font-family: monospace;">ID: ${comp.id} | Type: ${comp.device_type}</div>
+                        <div style="font-weight: 600; font-size: 1.1em; color: #ececec; margin-bottom: 4px;">${compLabel}</div>
+                        <div style="font-size: 0.8em; color: #a3a3a3; font-family: monospace;">ID: ${compId} | Type: ${comp.device_type || 'Unknown'}</div>
                         <div style="display: flex; gap: 8px; margin-top: 8px;">
                             <button class="action-btn outline" style="padding: 6px 12px; font-size: 0.85em; ${btnStyle}" ${btnDisabled} onclick="window.addToSession('${fabricatedItem}', this)">${btnText}</button>
                             <button class="action-btn outline" style="padding: 6px 12px; font-size: 0.85em; border-color: #ff79c6; color: #ff79c6;" onclick="window.openPassport('${idEncoded}', '${nameEncoded}', '${notesEncoded}')">Passport Details</button>
