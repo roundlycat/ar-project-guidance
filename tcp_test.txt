@@ -1,0 +1,11 @@
+
+ComputerName           : 192.168.0.24
+RemoteAddress          : 192.168.0.24
+RemotePort             : 8000
+InterfaceAlias         : Wi-Fi
+SourceAddress          : 192.168.0.13
+PingSucceeded          : True
+PingReplyDetails (RTT) : 23 ms
+TcpTestSucceeded       : False
+
+

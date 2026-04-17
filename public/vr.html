@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Stereoscopic AR HUD</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;600&display=swap" rel="stylesheet">
+  <style>
+    body, html { 
+        margin: 0; padding: 0; width: 100%; height: 100%; 
+        background: #000; overflow: hidden; font-family: 'Outfit', sans-serif; 
+    }
+    
+    .stereoscopic-rig { 
+        display: flex; width: 100%; height: 100%; 
+    }
+    
+    .eye-panel { 
+        flex: 1; position: relative; overflow: hidden; 
+        border-right: 2px solid #050505; /* Separation line for ocular immersion */
+    }
+    
+    /* Center the camera perfectly so both eyes align in hardware */
+    video { 
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+        object-fit: cover; z-index: 1; 
+    }
+    
+    .hud-layer { 
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+        z-index: 10; display: flex; flex-direction: column; 
+        justify-content: center; align-items: center; 
+        pointer-events: none; /* Let clicks pass through */
+    }
+    
+    /* Targeting Reticle */
+    .reticle { 
+        width: 60px; height: 60px; 
+        border: 2px solid rgba(0, 229, 255, 0.4); border-radius: 50%; 
+        display: flex; align-items: center; justify-content: center; 
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        box-shadow: 0 0 15px rgba(0, 229, 255, 0.2), inset 0 0 10px rgba(0, 229, 255, 0.2);
+    }
+    
+    .reticle::after { 
+        content: ''; width: 6px; height: 6px; 
+        background: #00e5ff; border-radius: 50%; 
+        box-shadow: 0 0 8px #00e5ff;
+    }
+
+    /* Framing brackets for AI lock-on aesthetic */
+    .brackets {
+        position: absolute; top: 50%; left: 50%;
+        width: 140px; height: 140px; transform: translate(-50%, -50%);
+        border: 2px solid transparent;
+    }
+    .brackets::before, .brackets::after {
+        content: ''; position: absolute; width: 25px; height: 25px; border-color: #00e5ff; border-style: solid;
+    }
+    .brackets::before { top: 0; left: 0; border-width: 3px 0 0 3px; }
+    .brackets::after { bottom: 0; right: 0; border-width: 0 3px 3px 0; }
+    
+    /* Telemetry Display */
+    .telemetry-dashboard { 
+        position: absolute; bottom: 30px; 
+        background: rgba(10, 15, 25, 0.75); backdrop-filter: blur(5px);
+        padding: 12px 24px; border: 1px solid rgba(0, 229, 255, 0.3); 
+        border-radius: 12px; text-align: center; color: #ececec;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .temp-readout { font-size: 1.8rem; font-weight: 600; color: #00e5ff; text-shadow: 0 0 10px rgba(0, 229, 255, 0.5); }
+    .state-readout { font-size: 0.85rem; color: #8ab89a; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+
+    .warning-banner {
+        position: absolute; top: 30px;
+        color: #ff5555; border: 1px solid #ff5555; background: rgba(50,0,0,0.5);
+        padding: 5px 15px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+        display: none; animation: flash 2s infinite;
+    }
+
+    @keyframes flash {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="stereoscopic-rig">
+  <!-- LEFT EYE -->
+  <div class="eye-panel" id="left-eye">
+    <video autoplay playsinline muted></video>
+    <div class="hud-layer">
+      <div class="warning-banner">LINK SEVERED</div>
+      <div class="wireframe-container" id="left-wireframes" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
+      <div class="reticle"></div>
+      <div class="telemetry-dashboard">
+        <div class="temp-readout"><span class="temp">--</span>°C</div>
+        <div class="state-readout">Establishing Uplink...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT EYE (Identical Duplicate) -->
+  <div class="eye-panel" id="right-eye">
+    <video autoplay playsinline muted></video>
+    <div class="hud-layer">
+      <div class="warning-banner">LINK SEVERED</div>
+      <div class="wireframe-container" id="right-wireframes" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
+      <div class="reticle"></div>
+      <div class="telemetry-dashboard">
+        <div class="temp-readout"><span class="temp">--</span>°C</div>
+        <div class="state-readout">Establishing Uplink...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let savedPiIp = localStorage.getItem('pi_ip') || window.location.hostname;
+  
+  async function bootOptics() {
+    try {
+      const constraints = { video: { facingMode: { ideal: "environment" } } };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      document.querySelectorAll('video').forEach(async vid => {
+          vid.srcObject = stream;
+          try { await vid.play(); } catch(err) { console.warn("Auto-play suppressed", err); }
+      });
+    } catch(e) { 
+        alert("Optics Boot Failure: Ensure viewing from HTTPS.\n" + e.message); 
+    }
+  }
+  
+  async function syncTelemetry() {
+    try {
+      const isCloudHost = window.location.hostname !== 'localhost' && !window.location.hostname.startsWith('192.168.');
+      const backendUrl = isCloudHost ? `https://${savedPiIp}:9500` : '';
+    
+      const res = await fetch(`${backendUrl}/api/proxy/ecology?ip=${savedPiIp}`);
+      if (!res.ok) throw new Error("Gateway proxy unlinked");
+      const data = await res.json();
+      
+      document.querySelectorAll('.temp').forEach(el => el.textContent = data.temperature ? data.temperature.toFixed(1) : '--');
+      document.querySelectorAll('.state-readout').forEach(el => {
+          el.textContent = data.system_state || 'Nominal';
+          el.style.color = '#8ab89a';
+      });
+      document.querySelectorAll('.warning-banner').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.reticle').forEach(el => el.style.borderColor = 'rgba(0, 229, 255, 0.4)');
+    } catch(e) {
+      document.querySelectorAll('.state-readout').forEach(el => { el.textContent = "SIGNAL LOST"; el.style.color = '#ff5555'; });
+      document.querySelectorAll('.warning-banner').forEach(el => el.style.display = 'block');
+      document.querySelectorAll('.reticle').forEach(el => el.style.borderColor = 'rgba(255, 85, 85, 0.4)');
+    }
+  }
+
+  /* 
+     GHOST AR MODE: The heavy physical video stream stays entirely on the Pi Bench.
+     The Web App seamlessly pulls only the ultra-lightweight mathematical JSON wireframes
+     and dynamically paints them perfectly over the phone's native physical camera passthrough!
+  */
+  let activeTargetIndex = 0;
+  let componentCache = [];
+  let dpadPressed = false;
+
+  // Xbox Controller / Gamepad API Integration & Haptics
+  function pollGamepad() {
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      // Securely locate the first active slot (Android sometimes assigns BT controllers to slots 1-3)
+      const gp = Array.from(gamepads).find(g => g !== null);
+      
+      if (gp && componentCache.length > 0) {
+          // Detect D-Pad Right (Button 15) or Right Bumper (Button 5)
+          const rightPush = gp.buttons[15]?.pressed || gp.buttons[5]?.pressed;
+          const leftPush = gp.buttons[14]?.pressed || gp.buttons[4]?.pressed;
+          
+          if ((rightPush || leftPush) && !dpadPressed) {
+              if (rightPush) activeTargetIndex = (activeTargetIndex + 1) % componentCache.length;
+              if (leftPush) activeTargetIndex = (activeTargetIndex - 1 + componentCache.length) % componentCache.length;
+              
+              dpadPressed = true;
+              renderWireframeCache();
+              
+              // Trigger physical Xbox Controller Rumble upon locking a new AR Target!
+              if (gp.vibrationActuator) {
+                  try {
+                      gp.vibrationActuator.playEffect("dual-rumble", {
+                          startDelay: 0, duration: 80, weakMagnitude: 0.9, strongMagnitude: 0.2
+                      });
+                  } catch(e) { console.warn("Haptics unavailable."); }
+              }
+              
+          } else if (!rightPush && !leftPush) {
+              dpadPressed = false;
+          }
+      }
+      requestAnimationFrame(pollGamepad);
+  }
+
+  function renderWireframeCache() {
+      if (!componentCache || componentCache.length === 0) return;
+      
+      const video = document.querySelector('video');
+      const panel = document.querySelector('.eye-panel');
+      if (!video || !video.videoWidth) return;
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const pw = panel.clientWidth;
+      const ph = panel.clientHeight;
+      
+      const videoAspect = vw / vh;
+      const panelAspect = pw / ph;
+      
+      let renderedWidth, renderedHeight, offsetX = 0, offsetY = 0;
+      
+      // Calculate exactly how 'object-fit: cover' scaled and cropped the video
+      if (videoAspect > panelAspect) { // Video is wider, crop sides
+          renderedHeight = ph;
+          renderedWidth = ph * videoAspect;
+          offsetX = (renderedWidth - pw) / 2;
+      } else { // Video is taller, crop top/bottom
+          renderedWidth = pw;
+          renderedHeight = pw / videoAspect;
+          offsetY = (renderedHeight - ph) / 2;
+      }
+      
+      const wireframeHTML = componentCache.map((comp, idx) => {
+          const box = comp.box || { xmin: 0.1, ymin: 0.1, xmax: 0.3, ymax: 0.3 };
+          
+          // Map intrinsic percentage to the dynamically scaled render coordinates
+          const pxLeft = (box.xmin * renderedWidth) - offsetX;
+          const pxTop = (box.ymin * renderedHeight) - offsetY;
+          const pxWidth = (box.xmax - box.xmin) * renderedWidth;
+          const pxHeight = (box.ymax - box.ymin) * renderedHeight;
+          
+          // Convert back into CSS percentages relative to the physical panel
+          const left = (pxLeft / pw) * 100;
+          const top = (pxTop / ph) * 100;
+          const width = (pxWidth / pw) * 100;
+          const height = (pxHeight / ph) * 100;
+          
+          const isTargeted = (idx === activeTargetIndex);
+          const color = isTargeted ? '#00e5ff' : '#a78bfa';
+          const bg = isTargeted ? 'rgba(0, 229, 255, 0.2)' : 'rgba(167, 139, 250, 0.05)';
+          const zIndex = isTargeted ? 100 : 1;
+          const borderStyle = isTargeted ? 'solid' : 'dashed';
+          
+          return `
+            <div style="position: absolute; left: ${left}%; top: ${top}%; width: ${width}%; height: ${height}%; 
+                        border: 2px ${borderStyle} ${color}; background: ${bg}; z-index: ${zIndex}; transition: all 0.2s ease;">
+                <div style="position:absolute; top:-25px; left:0; color:${color}; font-size:12px; white-space:nowrap; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 4px;">
+                   ${isTargeted ? '▶ TARGET: ' : ''}${comp.label || comp.type || 'Unknown Component'}
+                </div>
+            </div>
+          `;
+      }).join('');
+      
+      document.getElementById('left-wireframes').innerHTML = wireframeHTML;
+      document.getElementById('right-wireframes').innerHTML = wireframeHTML;
+  }
+
+  function captureInternalFrame() {
+      const video = document.querySelector('video');
+      if (!video || !video.videoWidth) return null;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Return raw base64 string stripped of the mime prefix
+      return canvas.toDataURL('image/jpeg', 0.8).split(',')[1]; 
+  }
+
+  let hasPromptedKey = false;
+  async function syncGhostWireframes() {
+    try {
+      let apiKey = localStorage.getItem('gemini_api_key');
+      if (!apiKey || apiKey.trim() === '') {
+          if (hasPromptedKey) return;
+          hasPromptedKey = true;
+          apiKey = prompt("VR OPTICS BOOT:\nPlease enter your Gemini API Key to enable autonomous Client-Side AR Vision:");
+          if (apiKey) localStorage.setItem('gemini_api_key', apiKey.trim());
+          else return;
+      }
+      
+      const b64Image = captureInternalFrame();
+      if (!b64Image) return; // Wait for camera to boot
+      
+      const promptText = `
+        Analyze this POV electronics workbench image. 
+        Identify all electronic components (e.g. Microcontrollers, ICs, Sensors, Breakouts).
+        Return ONLY a raw JSON object matching this schema:
+        { "components": [ { "type": "string", "label": "string", "box": {"ymin": float (0.0 to 1.0), "xmin": float, "ymax": float, "xmax": float} } ] }
+      `;
+      
+      const payload = {
+          "contents": [{
+              "parts": [
+                  {"text": promptText},
+                  {"inline_data": {"mime_type": "image/jpeg", "data": b64Image}}
+              ]
+          }],
+          "generationConfig": { "response_mime_type": "application/json", "temperature": 0.1 }
+      };
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) throw new Error(`Client Vision Sync Failed: ${res.status}`);
+      const data = await res.json();
+      
+      if (data && data.candidates && data.candidates.length > 0) {
+          const rawText = data.candidates[0].content.parts[0].text;
+          const cleanJson = JSON.parse(rawText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim() || rawText);
+          
+          if (cleanJson.components && cleanJson.components.length > 0) {
+              componentCache = cleanJson.components;
+              if (activeTargetIndex >= componentCache.length) activeTargetIndex = 0;
+              renderWireframeCache();
+          }
+      }
+    } catch(e) {
+        console.warn("Autonomous Ghost Mode Warning:", e);
+    }
+  }
+  
+  window.addEventListener("gamepadconnected", (e) => {
+      console.log("XBOX CONTROLLER LINKED:", e.gamepad.id);
+      document.querySelectorAll('.state-readout').forEach(el => el.textContent += " + GAMEPAD");
+  });
+
+  bootOptics();
+  pollGamepad();
+  setInterval(syncTelemetry, 2000);
+  setInterval(syncGhostWireframes, 5000); 
+</script>
+
+</body>
+</html>

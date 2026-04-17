@@ -1,0 +1,11 @@
+fastapi>=0.115.12
+uvicorn[standard]>=0.32.0
+httpx>=0.27.0
+pydantic>=2.10.0
+opencv-python-headless>=4.10.0.84
+websockets>=14.1
+psycopg2-binary>=2.9.9
+python-multipart
+sentence-transformers
+google-genai
+pgvector

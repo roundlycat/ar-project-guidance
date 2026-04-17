@@ -1,0 +1,225 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #0d0f12;
+  --surface: #141720;
+  --surface2: #1c2030;
+  --border: #2a2f3f;
+  --text: #cdd3e0;
+  --text-dim: #5a6278;
+  --text-bright: #edf0f7;
+  --accent: #00e5cc;
+  --pwr: #ff6b6b;
+  --gnd: #8892a4;
+  --scl: #ffd166;
+  --sda: #74b9ff;
+  --warn: #ff9f43;
+  --done: #2ecc71;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: 'IBM Plex Sans', sans-serif;
+}
+
+#assembly-mode-panel {
+  background: rgba(13, 15, 18, 0.95); /* Slightly transparent to see bench faintly */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text);
+  font-family: var(--font-sans);
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 50; /* Supreme priority over all other UI panels */
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto; /* Reclaim interaction from generic AR traps */
+  transition: opacity 0.4s ease;
+}
+
+#assembly-mode-panel.hidden {
+  display: none !important;
+  opacity: 0;
+}
+
+#assembly-mode-panel * {
+  box-sizing: border-box;
+}
+
+/* ── Header bar ─────────────────────────────── */
+#assembly-mode-panel .topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 18px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+#assembly-mode-panel .topbar-left { display: flex; align-items: center; gap: 10px; }
+#assembly-mode-panel .ar-badge {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.12em; color: var(--accent); border: 1px solid var(--accent);
+  padding: 2px 6px; border-radius: 2px; opacity: 0.85;
+}
+#assembly-mode-panel .topbar-title {
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em;
+}
+#assembly-mode-panel .mode-tabs {
+  display: flex; gap: 2px; background: var(--bg); padding: 3px;
+  border-radius: 5px; border: 1px solid var(--border);
+}
+#assembly-mode-panel .mode-tab {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em;
+  padding: 4px 10px; border-radius: 3px; border: none; background: transparent;
+  color: var(--text-dim); cursor: pointer; transition: all 0.15s;
+}
+#assembly-mode-panel .mode-tab.active { background: var(--surface2); color: var(--accent); }
+
+/* ── Session bar ────────────────────────────── */
+#assembly-mode-panel .session-bar {
+  display: flex; align-items: center; gap: 8px; padding: 7px 18px;
+  background: rgba(0,229,204,0.04); border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); flex-shrink: 0;
+}
+#assembly-mode-panel .session-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 6px var(--accent); flex-shrink: 0;
+}
+#assembly-mode-panel .session-part { color: var(--text-bright); font-weight: 500; }
+#assembly-mode-panel .session-sep { color: var(--border); }
+
+/* ── Progress dots ──────────────────────────── */
+#assembly-mode-panel .progress-track {
+  display: flex; align-items: center; gap: 0; padding: 10px 18px 0; flex-shrink: 0;
+}
+#assembly-mode-panel .prog-dot {
+  width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--surface); font-family: var(--font-mono); font-size: 9px;
+  color: var(--text-dim); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; flex-shrink: 0; position: relative; z-index: 1;
+}
+#assembly-mode-panel .prog-dot.active {
+  border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px rgba(0,229,204,0.3);
+}
+#assembly-mode-panel .prog-dot.done {
+  border-color: var(--done); background: rgba(46,204,113,0.1); color: var(--done); font-size: 8px;
+}
+#assembly-mode-panel .prog-line {
+  flex: 1; height: 1px; background: var(--border); transition: background 0.3s;
+}
+#assembly-mode-panel .prog-line.done { background: var(--done); }
+#assembly-mode-panel .prog-labels {
+  display: flex; padding: 4px 18px 0; font-family: var(--font-mono); font-size: 8px; color: var(--text-dim);
+}
+#assembly-mode-panel .prog-label {
+  width: 26px; text-align: center; margin-right: 0; white-space: nowrap; overflow: hidden;
+}
+#assembly-mode-panel .prog-label-gap { flex: 1; }
+
+/* ── Main content ───────────────────────────── */
+#assembly-mode-panel .main {
+  flex: 1; display: flex; flex-direction: column; padding: 12px 18px; gap: 12px; overflow: hidden;
+}
+#assembly-mode-panel .cards-row { display: flex; gap: 0; align-items: stretch; }
+
+#assembly-mode-panel .component-card {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px 14px; min-width: 0;
+}
+#assembly-mode-panel .component-card.left { border-radius: 6px 0 0 6px; border-right: none; }
+#assembly-mode-panel .component-card.right { border-radius: 0 6px 6px 0; }
+
+#assembly-mode-panel .card-badge {
+  font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.12em;
+  color: var(--text-dim); text-transform: uppercase; margin-bottom: 2px;
+}
+#assembly-mode-panel .card-name {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+  color: var(--text-bright); margin-bottom: 10px; letter-spacing: 0.02em;
+}
+
+#assembly-mode-panel .pin-row {
+  display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: 3px;
+  transition: background 0.2s, box-shadow 0.2s; margin-bottom: 2px;
+}
+#assembly-mode-panel .pin-row.lit {
+  background: rgba(255,255,255,0.04); box-shadow: inset 2px 0 0 currentColor;
+}
+#assembly-mode-panel .pin-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; opacity: 0.4;
+  transition: opacity 0.2s, box-shadow 0.2s;
+}
+#assembly-mode-panel .pin-row.lit .pin-dot { opacity: 1; box-shadow: 0 0 5px currentColor; }
+#assembly-mode-panel .pin-label {
+  font-family: var(--font-mono); font-size: 8px; color: var(--text-dim); flex: 1; min-width: 0;
+}
+#assembly-mode-panel .pin-name {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 500; opacity: 0.5; transition: opacity 0.2s;
+}
+#assembly-mode-panel .pin-row.lit .pin-name { opacity: 1; }
+
+/* ── Wire SVG bridge ────────────────────────── */
+#assembly-mode-panel .wire-bridge {
+  width: 72px; flex-shrink: 0; position: relative; display: flex; align-items: center; justify-content: center;
+}
+#assembly-mode-panel .wire-bridge svg { width: 100%; height: 100%; overflow: visible; }
+#assembly-mode-panel .wire-path {
+  fill: none; stroke-width: 2; stroke-linecap: round; opacity: 0.12;
+  transition: opacity 0.35s, filter 0.35s; stroke-dasharray: 200; stroke-dashoffset: 0;
+}
+#assembly-mode-panel .wire-path.lit {
+  opacity: 1; filter: drop-shadow(0 0 3px currentColor); animation: dashflow 0.5s ease forwards;
+}
+@keyframes dashflow { from { stroke-dashoffset: 200; } to { stroke-dashoffset: 0; } }
+
+/* ── Step instruction panel ─────────────────── */
+#assembly-mode-panel .step-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; flex-shrink: 0;
+}
+#assembly-mode-panel .step-swatch {
+  width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
+  box-shadow: 0 0 8px currentColor; transition: background 0.3s, box-shadow 0.3s;
+}
+#assembly-mode-panel .step-body { flex: 1; min-width: 0; }
+#assembly-mode-panel .step-label {
+  font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.1em; color: var(--text-dim);
+  text-transform: uppercase; margin-bottom: 4px;
+}
+#assembly-mode-panel .step-text { font-family: var(--font-sans); font-size: 12px; line-height: 1.6; color: var(--text); }
+#assembly-mode-panel .step-text span {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--text-bright);
+  background: var(--surface2); padding: 0 4px; border-radius: 2px;
+}
+#assembly-mode-panel .warn-text {
+  font-family: var(--font-mono); font-size: 10px; color: var(--warn); margin-top: 5px; display: flex; align-items: center; gap: 5px;
+}
+#assembly-mode-panel .warn-text::before { content: '⚠'; }
+
+/* ── Nav buttons ────────────────────────────── */
+#assembly-mode-panel .nav-row {
+  display: flex; gap: 8px; align-items: center; flex-shrink: 0; padding-bottom: 4px;
+}
+#assembly-mode-panel .nav-btn {
+  font-family: var(--font-mono); font-size: 10px; padding: 7px 14px; border-radius: 4px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+  cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; white-space: nowrap;
+}
+#assembly-mode-panel .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+#assembly-mode-panel .nav-btn.primary {
+  border-color: var(--accent); color: var(--accent); background: rgba(0,229,204,0.06);
+}
+#assembly-mode-panel .nav-btn.primary:hover { background: rgba(0,229,204,0.14); }
+#assembly-mode-panel .nav-btn.complete {
+  border-color: var(--done); color: var(--done); background: rgba(46,204,113,0.06);
+}
+#assembly-mode-panel .spacer { flex: 1; }
+#assembly-mode-panel .nav-btn.flash { border-color: var(--text-dim); font-size: 9px; }
+#assembly-mode-panel .nav-btn.flash:hover { border-color: var(--sda); color: var(--sda); }
+
+/* ── Completion panel ───────────────────────── */
+#assembly-mode-panel .complete-panel {
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 20px; background: var(--surface); border: 1px solid var(--done);
+  border-radius: 6px; text-align: center; flex-shrink: 0;
+}
+#assembly-mode-panel .complete-panel.visible { display: flex; }
+#assembly-mode-panel .complete-icon { font-size: 24px; line-height: 1; }
+#assembly-mode-panel .complete-title {
+  font-family: var(--font-mono); font-size: 12px; color: var(--done); letter-spacing: 0.1em;
+}
+#assembly-mode-panel .complete-sub { font-family: var(--font-mono); font-size: 9px; color: var(--text-dim); }

@@ -1,0 +1,1 @@
+[["ingested_at", "timestamp with time zone"], ["embedding", "USER-DEFINED"], ["id", "integer"], ["ocr_raw", "text"], ["ocr_results", "text"], ["component_model", "text"], ["summary", "text"], ["tags", "ARRAY"], ["image_path", "text"], ["image_filename", "text"]]

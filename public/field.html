@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Macro Scanner - Sensor Ecology</title>
+  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    /* Specific overrides for mobile macro scanner */
+    body { flex-direction: column; background: #050505; }
+    .scanner-view { position: relative; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .camera-container { flex: 1; position: relative; background: #111; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #macro-video { width: 100%; height: 100%; object-fit: cover; }
+    #snap-preview { position: absolute; top:0; left:0; width:100%; height:100%; object-fit: contain; display: none; background: #000; z-index: 5; }
+    
+    .scanner-controls { padding: 24px; padding-bottom: max(24px, env(safe-area-inset-bottom)); background: rgba(20, 25, 40, 0.95); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,0.1); border-radius: 24px 24px 0 0; display: flex; flex-direction: column; gap: 16px; z-index: 10; }
+    
+    .shutter-btn-container { display: flex; justify-content: center; align-items: center; margin-top: -50px; margin-bottom: 10px; z-index: 20; }
+    .shutter-btn { width: 76px; height: 76px; border-radius: 50%; background: #00e5ff; border: 4px solid #1a237e; box-shadow: 0 4px 20px rgba(0, 229, 255, 0.4); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; }
+    .shutter-btn:active { transform: scale(0.9); }
+    .shutter-btn svg { color: #000; }
+    
+    .analysis-results { display: none; background: rgba(0,0,0,0.5); border: 1px solid #a78bfa; border-radius: 12px; padding: 16px; margin-top: 4px; max-height: 40vh; overflow-y: auto; color: #ececec; font-family: monospace; font-size: 0.95em; white-space: pre-wrap; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <header class="glass-header" style="border-radius: 0 0 20px 20px; border-top: none; background: rgba(20,25,40,0.8);">
+    <div class="branding">
+      <h1 style="font-size: 1.3em;">🔍 Field Macro Scanner</h1>
+      <span class="status-indicator" style="font-size: 0.8em; margin-top: 4px; display: block;">
+        <span class="dot" style="background: #00e5ff; box-shadow: 0 0 8px #00e5ff;"></span> iOS Offline Detail Mode
+      </span>
+    </div>
+    <div class="header-controls">
+      <button class="settings-btn" onclick="window.location.href='index.html'" title="Back to AR Guidance" style="background: rgba(255,255,255,0.1);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-x"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="scanner-view">
+    <div class="camera-container">
+      <video id="macro-video" autoplay playsinline></video>
+      <img id="snap-preview" />
+      <canvas id="capture-canvas" style="display: none;"></canvas>
+    </div>
+    
+    <div class="scanner-controls">
+      <div class="shutter-btn-container" id="shutter-btn-container" style="position: relative;">
+         <button class="shutter-btn" id="take-photo-btn" onclick="takeMacroPhoto()" title="Take Photo" aria-label="Take Photo">
+            <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+         </button>
+         <button onclick="flipMacroCamera()" title="Flip Camera" aria-label="Flip Camera" style="position: absolute; right: calc(50% - 100px); top: 13px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="14.94" x2="21" y2="3"></line><polyline points="8 21 3 21 3 16"></polyline><line x1="20" y1="9.06" x2="3" y2="21"></line></svg>
+         </button>
+      </div>
+      
+      <div id="action-buttons" style="display: none; flex-direction: column; gap: 12px;">
+         <div style="display: flex; gap: 8px;">
+             <button class="action-btn outline" style="flex: 1;" onclick="resetScanner()">Retake</button>
+             <button class="action-btn primary" style="flex: 2; font-weight: 600;" id="analyze-btn" onclick="analyzeMacroPhoto()">OCR & Analyze IC</button>
+         </div>
+         <button class="action-btn outline" style="width: 100%; border-color: #ff79c6; color: #ff79c6;" id="save-local-btn" onclick="saveToDevice()">Save Photo to Device</button>
+         <button class="action-btn" id="push-registry-btn" style="width: 100%; background: rgba(0,229,204,0.15); color: #00e5cc; border: 1px solid #00e5cc; display: none;" onclick="pushToRegistry()">☁️ Push to Project Registry</button>
+      </div>
+      
+      <div id="analysis-results" class="analysis-results"></div>
+    </div>
+  </div>
+
+  <script src="field.js?v=3"></script>
+</body>
+</html>

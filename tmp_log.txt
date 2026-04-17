@@ -1,0 +1,32 @@
+commit d648e181c85366ee8eea2f7dc1cc397b17130fb0
+Author: roundlycat <sean.pond@seanpond.dev>
+Date:   Wed Mar 18 15:18:36 2026 -0700
+
+    Implement dynamic DHCP IP loading to avoid hardcoding
+
+diff --git a/ar-project-guidance/public/app.js b/ar-project-guidance/public/app.js
+index f5122f0..a7e9e6a 100644
+--- a/ar-project-guidance/public/app.js
++++ b/ar-project-guidance/public/app.js
+@@ -79,10 +79,17 @@ document.getElementById('camera-toggle').addEventListener('click', async () => {
+     initCamera();
+ });
+ 
+-// Global config
+-const API_URL = "http://192.168.0.28:8000/api/stats/ecology";
+-const BRIDGE_HTTP = "http://192.168.0.28:8766";
+-const BRIDGE_WS = "ws://192.168.0.28:8766";
++// Global config - Dynamically load IP from localStorage to survive DHCP changes
++let savedPiIp = localStorage.getItem('pi_ip') || '192.168.0.28';
++const API_URL = `http://${savedPiIp}:8000/api/stats/ecology`;
++const BRIDGE_HTTP = `http://${savedPiIp}:8766`;
++const BRIDGE_WS = `ws://${savedPiIp}:8766`;
++
++window.setPiIp = (newIp) => {
++    localStorage.setItem('pi_ip', newIp);
++    console.log(`Pi IP updated to ${newIp}. Reloading...`);
++    window.location.reload();
++};
+ 
+ // Live device states from WebSockets
+ let deviceLiveStates = {};

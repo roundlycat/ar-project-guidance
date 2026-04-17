@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f12;
+    --surface: #141720;
+    --surface2: #1c2030;
+    --border: #2a2f3f;
+    --text: #cdd3e0;
+    --text-dim: #5a6278;
+    --text-bright: #edf0f7;
+    --accent: #00e5cc;
+    --pwr: #ff6b6b;
+    --gnd: #8892a4;
+    --scl: #ffd166;
+    --sda: #74b9ff;
+    --warn: #ff9f43;
+    --done: #2ecc71;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header bar ─────────────────────────────── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ar-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 2px 6px;
+    border-radius: 2px;
+    opacity: 0.85;
+  }
+  .topbar-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+  .mode-tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--bg);
+    padding: 3px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+  }
+  .mode-tab {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mode-tab.active {
+    background: var(--surface2);
+    color: var(--accent);
+  }
+
+  /* ── Session bar ────────────────────────────── */
+  .session-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 18px;
+    background: rgba(0,229,204,0.04);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .session-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    flex-shrink: 0;
+  }
+  .session-part {
+    color: var(--text-bright);
+    font-weight: 500;
+  }
+  .session-sep { color: var(--border); }
+
+  /* ── Progress dots ──────────────────────────── */
+  .progress-track {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 10px 18px 0;
+    flex-shrink: 0;
+  }
+  .prog-dot {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .prog-dot.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 10px rgba(0,229,204,0.3);
+  }
+  .prog-dot.done {
+    border-color: var(--done);
+    background: rgba(46,204,113,0.1);
+    color: var(--done);
+    font-size: 8px;
+  }
+  .prog-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+  .prog-line.done {
+    background: var(--done);
+  }
+  .prog-labels {
+    display: flex;
+    padding: 4px 18px 0;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--text-dim);
+  }
+  .prog-label {
+    width: 26px;
+    text-align: center;
+    margin-right: 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  /* spacer to match lines */
+  .prog-label-gap { flex: 1; }
+
+  /* ── Main content ───────────────────────────── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 18px;
+    gap: 12px;
+    overflow: hidden;
+  }
+
+  /* ── Component cards row ────────────────────── */
+  .cards-row {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .component-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    min-width: 0;
+  }
+  .component-card.left { border-radius: 6px 0 0 6px; border-right: none; }
+  .component-card.right { border-radius: 0 6px 6px 0; }
+
+  .card-badge {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .card-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 10px;
+    letter-spacing: 0.02em;
+  }
+
+  .pin-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    transition: background 0.2s, box-shadow 0.2s;
+    margin-bottom: 2px;
+  }
+  .pin-row.lit {
+    background: rgba(255,255,255,0.04);
+    box-shadow: inset 2px 0 0 currentColor;
+  }
+  .pin-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.4;
+    transition: opacity 0.2s, box-shadow 0.2s;
+  }
+  .pin-row.lit .pin-dot {
+    opacity: 1;
+    box-shadow: 0 0 5px currentColor;
+  }
+  .pin-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--text-dim);
+    flex: 1;
+    min-width: 0;
+  }
+  .pin-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+  }
+  .pin-row.lit .pin-name { opacity: 1; }
+
+  /* ── Wire SVG bridge ────────────────────────── */
+  .wire-bridge {
+    width: 72px;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wire-bridge svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+  .wire-path {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0.12;
+    transition: opacity 0.35s, filter 0.35s;
+    stroke-dasharray: 200;
+    stroke-dashoffset: 0;
+  }
+  .wire-path.lit {
+    opacity: 1;
+    filter: drop-shadow(0 0 3px currentColor);
+    animation: dashflow 0.5s ease forwards;
+  }
+  @keyframes dashflow {
+    from { stroke-dashoffset: 200; }
+    to   { stroke-dashoffset: 0; }
+  }
+
+  /* ── Step instruction panel ─────────────────── */
+  .step-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    flex-shrink: 0;
+  }
+  .step-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 3px;
+    box-shadow: 0 0 8px currentColor;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .step-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .step-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .step-text {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .step-text span {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-bright);
+    background: var(--surface2);
+    padding: 0 4px;
+    border-radius: 2px;
+  }
+  .warn-text {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--warn);
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .warn-text::before { content: '⚠'; }
+
+  /* ── Nav buttons ────────────────────────────── */
+  .nav-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+    padding-bottom: 4px;
+  }
+  .nav-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 7px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .nav-btn.primary {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,229,204,0.06);
+  }
+  .nav-btn.primary:hover { background: rgba(0,229,204,0.14); }
+  .nav-btn.complete {
+    border-color: var(--done);
+    color: var(--done);
+    background: rgba(46,204,113,0.06);
+  }
+  .spacer { flex: 1; }
+  .nav-btn.flash {
+    border-color: var(--text-dim);
+    font-size: 9px;
+  }
+  .nav-btn.flash:hover { border-color: var(--sda); color: var(--sda); }
+
+  /* ── Completion panel ───────────────────────── */
+  .complete-panel {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--done);
+    border-radius: 6px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .complete-panel.visible { display: flex; }
+  .complete-icon {
+    font-size: 24px;
+    line-height: 1;
+  }
+  .complete-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--done);
+    letter-spacing: 0.1em;
+  }
+  .complete-sub {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="ar-badge">AR GUIDE</span>
+    <span class="topbar-title">assembly mode — bench session</span>
+  </div>
+  <div class="mode-tabs">
+    <button class="mode-tab active" onclick="setMode('assembly', this)">ASSEMBLY</button>
+    <button class="mode-tab" onclick="setMode('discovery', this)">DISCOVERY</button>
+  </div>
+</div>
+
+<!-- Session bar -->
+<div class="session-bar">
+  <div class="session-dot"></div>
+  <span>parts detected:</span>
+  <span class="session-part">D1 Mini (ESP8266)</span>
+  <span class="session-sep">+</span>
+  <span class="session-part">BME280</span>
+  <span class="session-sep">·</span>
+  <span>interface: I²C · 3.3V · addr 0x76</span>
+</div>
+
+<!-- Progress track -->
+<div class="progress-track">
+  <div class="prog-dot active" id="dot0" onclick="goStep(0)">1</div>
+  <div class="prog-line" id="line0"></div>
+  <div class="prog-dot" id="dot1" onclick="goStep(1)">2</div>
+  <div class="prog-line" id="line1"></div>
+  <div class="prog-dot" id="dot2" onclick="goStep(2)">3</div>
+  <div class="prog-line" id="line2"></div>
+  <div class="prog-dot" id="dot3" onclick="goStep(3)">4</div>
+  <div class="prog-line" id="line3"></div>
+  <div class="prog-dot" id="dot4" onclick="goStep(4)">5</div>
+</div>
+<div class="prog-labels">
+  <div class="prog-label">start</div>
+  <div class="prog-label-gap"></div>
+  <div class="prog-label">pwr</div>
+  <div class="prog-label-gap"></div>
+  <div class="prog-label">gnd</div>
+  <div class="prog-label-gap"></div>
+  <div class="prog-label">scl</div>
+  <div class="prog-label-gap"></div>
+  <div class="prog-label">sda</div>
+</div>
+
+<!-- Main area -->
+<div class="main">
+
+  <!-- Component cards + wire bridge -->
+  <div class="cards-row">
+
+    <!-- D1 Mini card -->
+    <div class="component-card left">
+      <div class="card-badge">MCU</div>
+      <div class="card-name">D1 Mini</div>
+
+      <div class="pin-row" id="mcu-3v3" style="color:var(--pwr)">
+        <div class="pin-dot" style="background:var(--pwr)"></div>
+        <span class="pin-label">3.3v out</span>
+        <span class="pin-name" style="color:var(--pwr)">3V3</span>
+      </div>
+      <div class="pin-row" id="mcu-gnd" style="color:var(--gnd)">
+        <div class="pin-dot" style="background:var(--gnd)"></div>
+        <span class="pin-label">ground</span>
+        <span class="pin-name" style="color:var(--gnd)">GND</span>
+      </div>
+      <div class="pin-row" id="mcu-scl" style="color:var(--scl)">
+        <div class="pin-dot" style="background:var(--scl)"></div>
+        <span class="pin-label">D1 / GPIO5</span>
+        <span class="pin-name" style="color:var(--scl)">SCL</span>
+      </div>
+      <div class="pin-row" id="mcu-sda" style="color:var(--sda)">
+        <div class="pin-dot" style="background:var(--sda)"></div>
+        <span class="pin-label">D2 / GPIO4</span>
+        <span class="pin-name" style="color:var(--sda)">SDA</span>
+      </div>
+    </div>
+
+    <!-- Wire bridge SVG -->
+    <div class="wire-bridge">
+      <svg viewBox="0 0 72 120" preserveAspectRatio="none">
+        <!-- pwr -->
+        <path id="w-pwr" class="wire-path" d="M0,18 C36,18 36,22 72,22"
+              style="stroke:var(--pwr); color:var(--pwr)"/>
+        <!-- gnd -->
+        <path id="w-gnd" class="wire-path" d="M0,38 C36,38 36,42 72,42"
+              style="stroke:var(--gnd); color:var(--gnd)"/>
+        <!-- scl -->
+        <path id="w-scl" class="wire-path" d="M0,58 C36,58 36,62 72,62"
+              style="stroke:var(--scl); color:var(--scl)"/>
+        <!-- sda -->
+        <path id="w-sda" class="wire-path" d="M0,78 C36,78 36,82 72,82"
+              style="stroke:var(--sda); color:var(--sda)"/>
+      </svg>
+    </div>
+
+    <!-- BME280 card -->
+    <div class="component-card right">
+      <div class="card-badge">SENSOR</div>
+      <div class="card-name">BME280</div>
+
+      <div class="pin-row" id="sen-vcc" style="color:var(--pwr)">
+        <div class="pin-dot" style="background:var(--pwr)"></div>
+        <span class="pin-label">3.3v supply</span>
+        <span class="pin-name" style="color:var(--pwr)">VCC</span>
+      </div>
+      <div class="pin-row" id="sen-gnd" style="color:var(--gnd)">
+        <div class="pin-dot" style="background:var(--gnd)"></div>
+        <span class="pin-label">ground</span>
+        <span class="pin-name" style="color:var(--gnd)">GND</span>
+      </div>
+      <div class="pin-row" id="sen-scl" style="color:var(--scl)">
+        <div class="pin-dot" style="background:var(--scl)"></div>
+        <span class="pin-label">i2c clock</span>
+        <span class="pin-name" style="color:var(--scl)">SCK</span>
+      </div>
+      <div class="pin-row" id="sen-sda" style="color:var(--sda)">
+        <div class="pin-dot" style="background:var(--sda)"></div>
+        <span class="pin-label">i2c data</span>
+        <span class="pin-name" style="color:var(--sda)">SDI</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step instruction panel -->
+  <div class="step-panel" id="step-panel">
+    <div class="step-swatch" id="step-swatch" style="background:var(--accent); color:var(--accent)"></div>
+    <div class="step-body">
+      <div class="step-label">STEP <span id="step-num">—</span></div>
+      <div class="step-text" id="step-text"></div>
+      <div class="warn-text" id="step-warn" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- Completion panel -->
+  <div class="complete-panel" id="complete-panel">
+    <div class="complete-icon">✓</div>
+    <div class="complete-title">WIRING COMPLETE</div>
+    <div class="complete-sub">D1 Mini ↔ BME280 · I²C · 0x76</div>
+  </div>
+
+  <!-- Nav row -->
+  <div class="nav-row">
+    <button class="nav-btn" id="btn-back" onclick="prevStep()">← back</button>
+    <button class="nav-btn primary" id="btn-next" onclick="nextStep()">confirm & next →</button>
+    <div class="spacer"></div>
+    <button class="nav-btn flash" onclick="flashConfig()">flash config ↗</button>
+  </div>
+
+</div>
+
+<script>
+const steps = [
+  {
+    label: "START",
+    color: "var(--accent)",
+    wires: [],
+    pins: [],
+    text: "Parts identified — <span>D1 Mini (ESP8266)</span> and <span>BME280</span>. Interface: I²C, 3.3V logic, address 0x76 with SDO pulled low. Four connections required.",
+    warn: null,
+    num: "—"
+  },
+  {
+    label: "POWER",
+    color: "var(--pwr)",
+    wires: ["w-pwr"],
+    pins: ["mcu-3v3","sen-vcc"],
+    text: "Connect <span>red wire</span>: D1 Mini <span>3V3</span> → BME280 <span>VCC</span>. BME280 operates at 1.7–3.6V.",
+    warn: "Do not connect to the 5V rail — will damage the sensor.",
+    num: "1 / 4"
+  },
+  {
+    label: "GROUND",
+    color: "var(--gnd)",
+    wires: ["w-pwr","w-gnd"],
+    pins: ["mcu-3v3","sen-vcc","mcu-gnd","sen-gnd"],
+    text: "Connect <span>grey wire</span>: D1 Mini <span>GND</span> → BME280 <span>GND</span>. Any GND pin on the D1 Mini works.",
+    warn: null,
+    num: "2 / 4"
+  },
+  {
+    label: "I²C CLK",
+    color: "var(--scl)",
+    wires: ["w-pwr","w-gnd","w-scl"],
+    pins: ["mcu-3v3","sen-vcc","mcu-gnd","sen-gnd","mcu-scl","sen-scl"],
+    text: "Connect <span>yellow wire</span>: D1 Mini <span>D1 / SCL</span> → BME280 <span>SCK</span>. D1 is GPIO5, the default SCL pin for <span>Wire.begin()</span>.",
+    warn: null,
+    num: "3 / 4"
+  },
+  {
+    label: "I²C DATA",
+    color: "var(--sda)",
+    wires: ["w-pwr","w-gnd","w-scl","w-sda"],
+    pins: ["mcu-3v3","sen-vcc","mcu-gnd","sen-gnd","mcu-scl","sen-scl","mcu-sda","sen-sda"],
+    text: "Connect <span>blue wire</span>: D1 Mini <span>D2 / SDA</span> → BME280 <span>SDI</span>. D2 is GPIO4, default SDA. I²C address will be <span>0x76</span> with SDO pulled low.",
+    warn: null,
+    num: "4 / 4"
+  }
+];
+
+let cur = 0;
+
+function applyStep(s) {
+  const step = steps[s];
+
+  // swatch
+  const sw = document.getElementById('step-swatch');
+  sw.style.background = step.color;
+  sw.style.color = step.color;
+  sw.style.boxShadow = `0 0 8px ${step.color}`;
+
+  // step text
+  document.getElementById('step-num').textContent = step.num;
+  document.getElementById('step-text').innerHTML = step.text;
+  const warnEl = document.getElementById('step-warn');
+  if (step.warn) {
+    warnEl.textContent = step.warn;
+    warnEl.style.display = 'flex';
+  } else {
+    warnEl.style.display = 'none';
+  }
+
+  // wires
+  document.querySelectorAll('.wire-path').forEach(w => w.classList.remove('lit'));
+  step.wires.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove('lit'); void el.offsetWidth; el.classList.add('lit'); }
+  });
+
+  // pins
+  document.querySelectorAll('.pin-row').forEach(p => p.classList.remove('lit'));
+  step.pins.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('lit');
+  });
+
+  // progress dots
+  for (let i = 0; i < steps.length; i++) {
+    const dot = document.getElementById('dot'+i);
+    const line = document.getElementById('line'+(i));
+    dot.classList.remove('active','done');
+    if (i < s) { dot.classList.add('done'); dot.textContent = '✓'; }
+    else if (i === s) { dot.classList.add('active'); dot.textContent = i+1; }
+    else { dot.textContent = i+1; }
+    if (line) line.classList.toggle('done', i < s);
+  }
+
+  // completion
+  const isLast = s === steps.length - 1;
+  document.getElementById('complete-panel').classList.toggle('visible', isLast);
+  document.getElementById('step-panel').style.display = isLast ? 'none' : 'flex';
+  document.getElementById('btn-next').textContent = isLast ? 'flash config ↗' : 'confirm & next →';
+  document.getElementById('btn-next').className = isLast ? 'nav-btn complete' : 'nav-btn primary';
+  document.getElementById('btn-back').style.opacity = s === 0 ? '0.3' : '1';
+}
+
+function nextStep() {
+  if (cur < steps.length - 1) { cur++; applyStep(cur); }
+  else { flashConfig(); }
+}
+function prevStep() {
+  if (cur > 0) { cur--; applyStep(cur); }
+}
+function goStep(s) {
+  cur = s; applyStep(cur);
+}
+function setMode(m, btn) {
+  document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (m === 'discovery' && typeof sendPrompt === 'function') {
+    sendPrompt('Switch AR guidance to discovery mode');
+  }
+}
+function flashConfig() {
+  if (typeof sendPrompt === 'function') {
+    sendPrompt('Show me the firmware flash config for D1 Mini + BME280 on I²C address 0x76');
+  }
+}
+
+applyStep(0);
+</script>
+</body>
+</html>

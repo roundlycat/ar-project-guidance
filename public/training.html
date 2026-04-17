@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Grammar Training Engine</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --text: #c9d1d9;
+            --accent: #58a6ff;
+            --success: #3fb950;
+            --error: #f85149;
+        }
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; padding: 0; background: var(--bg); color: var(--text);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;
+            overflow: hidden;
+        }
+        .hud-container {
+            width: 90%; max-width: 800px;
+            background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+            padding: 2rem; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h1 { font-weight: 300; letter-spacing: 2px; text-transform: uppercase; margin-top: 0; }
+        .status { font-size: 0.9rem; color: #8b949e; margin-bottom: 2rem; }
+        
+        .prompt-board {
+            min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 2px dashed #484f58; border-radius: 8px; margin-bottom: 2rem; transition: all 0.2s;
+        }
+        .prompt-text { font-size: 1.5rem; font-weight: 600; margin: 0; }
+        .prompt-hint { font-size: 1rem; color: #8b949e; margin-top: 0.5rem; }
+        
+        .stats {
+            display: flex; justify-content: space-around; width: 100%; border-top: 1px solid #30363d; padding-top: 1rem;
+        }
+        .stat-box { display: flex; flex-direction: column; }
+        .stat-val { font-size: 1.5rem; font-weight: bold; color: var(--accent); }
+        .stat-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: #8b949e; }
+        
+        #btn-start {
+            background: var(--accent); border: none; padding: 10px 24px; border-radius: 6px;
+            color: #fff; font-size: 1rem; cursor: pointer; text-transform: uppercase; font-weight: 600;
+        }
+        
+    </style>
+</head>
+<body>
+
+    <div class="hud-container">
+        <h1>Embodied AR Grammar</h1>
+        <div class="status" id="gp-status">Searching for Xbox Controller...</div>
+        
+        <div class="prompt-board" id="board">
+            <h2 class="prompt-text">Welcome to Cognitive Drift Training</h2>
+            <p class="prompt-hint">Connect your controller to begin mapping muscle-memory to semantic tasks.</p>
+            <button id="btn-start" style="display:none; margin-top:20px;">Initialize Training Routine</button>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <span class="stat-val" id="st-accuracy">0%</span>
+                <span class="stat-label">Accuracy</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-val" id="st-avg-time">0 ms</span>
+                <span class="stat-label">Avg React</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-val" id="st-drills">0</span>
+                <span class="stat-label">Drills Run</span>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- The User's Interaction Grammar Dictionary ---
+    const MODES = [
+        { id: "ID", name: "ID Mode", paddleIndex: 12 }, // Assuming P1 maps to D-Pad Up internally, or we use bumpers temporarily
+        { id: "MEASURE", name: "Measure Mode", paddleIndex: 13 },
+        { id: "WIRING", name: "Wiring Mode", paddleIndex: 14 },
+        { id: "TELEMETRY", name: "Telemetry Mode", paddleIndex: 15 }
+    ];
+
+    const ACTIONS = [
+        { mode: "ID", btnNames: ["A"], btnIndexes: [0], text: "Confirm Object Identification", haptic: "CONFIRMED" },
+        { mode: "ID", btnNames: ["B"], btnIndexes: [1], text: "Reject / Skip Target", haptic: "CANDIDATE" },
+        { mode: "ID", btnNames: ["Y"], btnIndexes: [3], text: "Flag Unknown Anomaly", haptic: "AMBIGUOUS" },
+        
+        { mode: "MEASURE", btnNames: ["A"], btnIndexes: [0], text: "Set Point 1 Header", haptic: "CONFIDENT" },
+        { mode: "MEASURE", btnNames: ["Y"], btnIndexes: [3], text: "Capture Measure to Record", haptic: "CONFIRMED" },
+        
+        { mode: "WIRING", btnNames: ["A"], btnIndexes: [0], text: "Confirm Netlist Connection", haptic: "CONFIRMED" },
+        { mode: "WIRING", btnNames: ["B"], btnIndexes: [1], text: "Break Trace", haptic: "LINK_SEVERED" },
+        
+        { mode: "TELEMETRY", btnNames: ["X"], btnIndexes: [2], text: "Set Alert Threshold", haptic: "SCANNING" },
+        { mode: "TELEMETRY", btnNames: ["Y"], btnIndexes: [3], text: "Log Reading to pgvector", haptic: "CONFIRMED" }
+    ];
+
+    let isPolling = false;
+    let inSession = false;
+    let activeMode = "ID"; // Simulated logic state
+    
+    let currentDrill = null;
+    let drillStartTime = 0;
+    let waitLatches = new Set();
+    
+    // Stats
+    let totalDrills = 0;
+    let totalTime = 0;
+    let correctStrikes = 0;
+    
+    // Note: Elite Paddles often map to Face buttons unless remapped in OS. 
+    // For this prototype, we will bind D-Pad UP/DOWN/LEFT/RIGHT to simulate the 4 layer switches if paddles aren't discrete.
+    const VIRTUAL_PADDLES = {
+        12: "ID",         // D-Pad Up
+        13: "MEASURE",    // D-Pad Down
+        14: "WIRING",     // D-Pad Left
+        15: "TELEMETRY"   // D-Pad Right
+    };
+
+    function triggerHaptic(type) {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const gp = Array.from(gamepads).find(g => g !== null);
+        if (!gp || !gp.vibrationActuator) return;
+        
+        try {
+            let config = { startDelay: 0, duration: 200, weakMagnitude: 0, strongMagnitude: 0 };
+            
+            if (type === "CONFIRMED") config = { duration: 150, weakMagnitude: 0.8, strongMagnitude: 0.8 };
+            else if (type === "AMBIGUOUS") config = { duration: 400, weakMagnitude: 0.2, strongMagnitude: 0.6 };
+            else if (type === "LINK_SEVERED") config = { duration: 600, weakMagnitude: 0.1, strongMagnitude: 1.0 };
+            else if (type === "ERROR") config = { duration: 300, weakMagnitude: 1.0, strongMagnitude: 0.1 };
+            
+            gp.vibrationActuator.playEffect("dual-rumble", config);
+        } catch(e) {}
+    }
+
+    // --- Data Sonification Engine ---
+    let audioCtx, baseOsc, modOsc, masterGain, droneLFO, lfoGain;
+
+    function initAudio() {
+        if(audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.2; // Gentle ambient volume
+        masterGain.connect(audioCtx.destination);
+        
+        baseOsc = audioCtx.createOscillator();
+        baseOsc.type = 'sine';
+        baseOsc.frequency.value = 220; // A3 Anchor
+        
+        modOsc = audioCtx.createOscillator();
+        modOsc.type = 'triangle';
+        modOsc.frequency.value = 220; // Perfect Phase
+        
+        // Polyrhythmic Envelope / Tremolo
+        droneLFO = audioCtx.createOscillator();
+        droneLFO.type = 'sine';
+        droneLFO.frequency.value = 0.2; // Slow breathing cycle
+        
+        lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 0.5;
+        
+        // VCA architecture
+        const mixNode = audioCtx.createGain();
+        mixNode.gain.value = 0.8;
+        baseOsc.connect(mixNode);
+        modOsc.connect(mixNode);
+        
+        mixNode.connect(lfoGain);
+        droneLFO.connect(lfoGain.gain); // Modulate amplitude via LFO
+        lfoGain.connect(masterGain);
+        
+        baseOsc.start();
+        modOsc.start();
+        droneLFO.start();
+    }
+
+    function setSonicState(state) {
+        if(!audioCtx) return;
+        const now = audioCtx.currentTime;
+        
+        let targetModFreq = 220.0;  // Clean Unison Flow
+        let lfoSpeed = 0.2; 
+        
+        if (state === "AMBIGUOUS" || state === "CANDIDATE") {
+            targetModFreq = 233.08; // Dissonant Minor 2nd (Bb3) - Friction
+            lfoSpeed = 4.0;         // Nervous flutter
+        } else if (state === "LINK_SEVERED" || state === "ERROR") {
+            targetModFreq = 311.13; // Tritone Dissonance (Eb4) - Broken connection
+            lfoSpeed = 8.0;         // Fast chaotic glitching
+        } else if (state === "CONFIRMED" || state === "CONFIDENT") {
+            targetModFreq = 329.63; // Major Fifth Harmony (E4) - Resolution
+            lfoSpeed = 1.0;         // Solid tempo
+        }
+        
+        modOsc.frequency.setTargetAtTime(targetModFreq, now, 0.5); // Portamento glide
+        droneLFO.frequency.setTargetAtTime(lfoSpeed, now, 0.5);
+    }
+
+    function checkGamepad() {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const gp = Array.from(gamepads).find(g => g !== null);
+        
+        if (gp && !isPolling) {
+            document.getElementById('gp-status').innerText = `Linked: ${gp.id}`;
+            document.getElementById('gp-status').style.color = 'var(--success)';
+            document.getElementById('btn-start').style.display = 'inline-block';
+            isPolling = true;
+            pollInputs();
+        } else if (!gp && isPolling) {
+            document.getElementById('gp-status').innerText = 'Connection Lost. Plug in controller.';
+            document.getElementById('gp-status').style.color = 'var(--error)';
+            isPolling = false;
+            inSession = false;
+            if(masterGain) masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
+        }
+        
+        if (!isPolling) requestAnimationFrame(checkGamepad);
+    }
+
+    function generateDrill() {
+        const tgt = ACTIONS[Math.floor(Math.random() * ACTIONS.length)];
+        currentDrill = {
+            modeTarget: tgt.mode,
+            btnTarget: tgt.btnIndexes[0],
+            btnName: tgt.btnNames[0],
+            text: tgt.text,
+            expectedHaptic: tgt.haptic
+        };
+        
+        document.getElementById('board').style.borderColor = "#484f58";
+        document.getElementById('board').style.background = "transparent";
+        document.querySelector('.prompt-text').innerText = `${currentDrill.text}`;
+        document.querySelector('.prompt-hint').innerText = `Switch to ${currentDrill.modeTarget} Mode (D-Pad), then press ${currentDrill.btnName}`;
+        
+        drillStartTime = performance.now();
+        setSonicState(currentDrill.expectedHaptic); // Project synthetic acoustic affordance
+    }
+
+    function evalInput(pressedBtnIndex) {
+        if (!currentDrill || !inSession) return;
+        
+        const timeTaken = performance.now() - drillStartTime;
+        totalDrills++;
+        
+        const isModeCorrect = (activeMode === currentDrill.modeTarget);
+        const isBtnCorrect = (pressedBtnIndex === currentDrill.btnTarget);
+        
+        if (isModeCorrect && isBtnCorrect) {
+            // Success
+            correctStrikes++;
+            totalTime += timeTaken;
+            setTimeout(() => triggerHaptic(currentDrill.expectedHaptic), 50); // Play semantic haptic!
+            
+            setSonicState("CONFIDENT"); // Resolve the dissonance cleanly
+            document.getElementById('board').style.borderColor = "var(--success)";
+            document.getElementById('board').style.background = "rgba(63, 185, 80, 0.1)";
+            document.querySelector('.prompt-text').innerText = `SUCCESS! (${Math.round(timeTaken)}ms)`;
+        } else {
+            // Fail
+            triggerHaptic("ERROR");
+            setSonicState("ERROR"); // Spike the dissonance
+            document.getElementById('board').style.borderColor = "var(--error)";
+            document.getElementById('board').style.background = "rgba(248, 81, 73, 0.1)";
+            document.querySelector('.prompt-text').innerText = isModeCorrect ? `WRONG BUTTON` : `WRONG MODE (${activeMode})`;
+        }
+        
+        // Update Stats UI
+        document.getElementById('st-accuracy').innerText = `${Math.round((correctStrikes / totalDrills) * 100)}%`;
+        document.getElementById('st-drills').innerText = `${totalDrills}`;
+        if (correctStrikes > 0) document.getElementById('st-avg-time').innerText = `${Math.round(totalTime / correctStrikes)} ms`;
+        
+        currentDrill = null;
+        setTimeout(generateDrill, 1300);
+    }
+
+    function pollInputs() {
+        if (!isPolling) return;
+        const gamepads = navigator.getGamepads();
+        const gp = Array.from(gamepads).find(g => g !== null);
+        
+        if (gp) {
+            for (const [btnIdx, modeName] of Object.entries(VIRTUAL_PADDLES)) {
+                if (gp.buttons[btnIdx]?.pressed) {
+                    if (activeMode !== modeName) {
+                        activeMode = modeName;
+                        triggerHaptic("SCANNING"); 
+                        document.getElementById('gp-status').innerText = `Layer active: ${activeMode} MODE`;
+                    }
+                }
+            }
+            
+            [0, 1, 2, 3].forEach(btnIdx => { 
+                if (gp.buttons[btnIdx]?.pressed) {
+                    if (!waitLatches.has(btnIdx)) {
+                        waitLatches.add(btnIdx);
+                        evalInput(btnIdx);
+                    }
+                } else {
+                    waitLatches.delete(btnIdx);
+                }
+            });
+        }
+        
+        requestAnimationFrame(pollInputs);
+    }
+
+    document.getElementById('btn-start').addEventListener('click', () => {
+        initAudio(); // Boot the Acoustic Navigable Field
+        inSession = true;
+        totalDrills = 0; correctStrikes = 0; totalTime = 0;
+        document.getElementById('btn-start').style.display = 'none';
+        generateDrill();
+    });
+
+    // Start looking for the controller immediately
+    requestAnimationFrame(checkGamepad);
+
+</script>
+</body>
+</html>

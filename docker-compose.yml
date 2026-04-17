@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  ar-guidance:
+    build: .
+    container_name: ar-engine
+    restart: unless-stopped
+    ports:
+      - "9500:9500"
+    environment:
+      - DB_HOST=192.168.0.25 # Inferno Postgres Database IP
+    devices:
+      # THIS is the magic that violently passes your M.2 PCIe NPU into the container
+      # allowing the Dockerized python app to talk directly to the Hailo silicon!
+      - /dev/hailo0:/dev/hailo0
+    volumes:
+      # Give it access to the local network stream cache if necessary
+      - /dev/shm:/dev/shm

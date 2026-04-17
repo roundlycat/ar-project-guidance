@@ -1,0 +1,442 @@
+:root {
+    --primary-color: #00e5ff;
+    --secondary-color: #1a237e;
+    --bg-dark: #121212;
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --glass-bg: rgba(20, 25, 40, 0.4);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --accent: #ff4081;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Outfit', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Video Background */
+.video-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    background: #000;
+}
+
+.video-container video,
+#bench-cam-stream {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    /* Removed transform: scale(1.02) because it destroys 1:1 augmented reality bounding box alignment by visually pushing video pixels 2% off-center from their mathematical coordinates! */
+    filter: contrast(1.1) saturate(1.2);
+    transition: filter 0.5s ease;
+}
+
+.video-container video.agitated {
+    filter: contrast(1.5) saturate(0.8) sepia(0.3);
+}
+
+.video-container video.calm {
+    filter: contrast(1) saturate(1) hue-rotate(15deg);
+}
+
+/* UI Layer Overlay */
+.ui-layer {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    padding: 1rem;
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    pointer-events: none;
+    /* Let clicks pass through body... */
+    overflow: hidden;
+}
+
+/* Interactive elements need pointer-events back */
+.glass-header,
+.dashboard,
+.controls {
+    pointer-events: auto;
+}
+
+/* Glassmorphism Classes */
+.glass-header,
+.glass-panel,
+.glass-footer {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: 20px;
+}
+
+/* Header */
+.glass-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    margin-bottom: auto;
+    /* Push dashboard and footer down */
+}
+
+.branding h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    letter-spacing: 0.5px;
+    background: linear-gradient(90deg, #00e5ff, #8c9eff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.status-indicator {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    background-color: #00e676;
+    border-radius: 50%;
+    box-shadow: 0 0 10px #00e676;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.7);
+    }
+
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(0, 230, 118, 0);
+    }
+
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(0, 230, 118, 0);
+    }
+}
+
+.settings-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s ease;
+}
+
+.settings-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+/* Dashboard */
+.dashboard {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+    /* Bound inner scrolling */
+    min-height: 0;
+    /* Crucial for flex collapsing */
+}
+
+.glass-panel {
+    padding: 1.5rem;
+}
+
+.analytics-panel h2 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 1rem;
+}
+
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.metric .label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.metric .value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    transition: color 0.3s ease;
+}
+
+.value.active {
+    color: var(--primary-color);
+    text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+.value.agitated {
+    color: var(--accent);
+    text-shadow: 0 0 10px rgba(255, 64, 129, 0.5);
+}
+
+/* Notifications / Semantic Log */
+.notification-panel {
+    flex-grow: 1;
+    /* Fill remaining space in dashboard */
+    flex-shrink: 1;
+    /* Shrink strictly to not push out footer */
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.notification-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notification-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.log-entry {
+    font-size: 0.9rem;
+    display: flex;
+    gap: 0.75rem;
+    line-height: 1.4;
+    animation: slideFadeIn 0.4s ease forwards;
+}
+
+.log-entry .time {
+    color: var(--primary-color);
+    font-family: monospace;
+    font-size: 0.8rem;
+}
+
+@keyframes slideFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.controls {
+    padding: 1rem 1.5rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-direction: column;
+    /* Force stack on mobile to prevent clipping */
+}
+
+.action-btn {
+    flex-grow: 1;
+    width: 100%;
+    padding: 0.8rem 1.5rem;
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+}
+
+.action-btn.primary {
+    background: linear-gradient(135deg, var(--primary-color), #2979ff);
+    color: var(--bg-dark);
+    box-shadow: 0 4px 15px rgba(0, 229, 255, 0.3);
+}
+
+.action-btn.primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 229, 255, 0.5);
+}
+
+.action-btn.primary:active {
+    transform: translateY(0);
+}
+
+.action-btn.outline {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--glass-border);
+}
+
+.action-btn.outline:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.error-msg {
+    width: 100%;
+    color: var(--accent);
+    font-size: 0.85rem;
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Loader */
+.loader {
+    display: flex;
+    gap: 4px;
+}
+
+.loader div {
+    width: 8px;
+    height: 8px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 100%;
+    display: inline-block;
+    animation: sk-bouncedelay 1.4s infinite ease-in-out both;
+}
+
+.loader .bounce1 {
+    animation-delay: -0.32s;
+}
+
+.loader .bounce2 {
+    animation-delay: -0.16s;
+}
+
+@keyframes sk-bouncedelay {
+
+    0%,
+    80%,
+    100% {
+        transform: scale(0);
+    }
+
+    40% {
+        transform: scale(1);
+    }
+}
+
+/* Ghost Mode overrides for X-Ray vision */
+body.ghost-mode .glass-panel,
+body.ghost-mode .glass-header,
+body.ghost-mode .glass-footer {
+    background: rgba(10, 15, 25, 0.1) !important;
+    -webkit-backdrop-filter: blur(1px) !important;
+    backdrop-filter: blur(1px) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: none !important;
+}
+
+.ar-card {
+    background: rgba(25, 30, 45, 0.65);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    border-radius: 8px;
+    flex: 1;
+    min-width: 180px;
+    transition: all 0.3s ease;
+}
+
+.ar-card.unrecognized {
+    background: rgba(255, 100, 100, 0.15);
+    padding: 10px;
+}
+
+body.ghost-mode .ar-card {
+    background: rgba(0, 0, 0, 0.45) !important;
+    -webkit-backdrop-filter: blur(0px) !important;
+    backdrop-filter: blur(0px) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+#bench-cam-stream {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+
+#thermal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0.8;
+    mix-blend-mode: screen;
+    transition: opacity 0.5s ease;
+}
+
+/* Accordion functionality for smaller screens */
+.card-details {
+    display: none;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.ar-card.expanded .card-details {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
