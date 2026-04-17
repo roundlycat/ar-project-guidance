@@ -1321,7 +1321,7 @@ window.openHardwareLibrary = async () => {
     listContainer.innerHTML = '<div style="text-align:center; color:#a3a3a3;">Loading registry components...</div>';
     
     try {
-        const res = await fetch(`${BRIDGE_HTTP}/api/registry/components`);
+        const res = await fetch(`${BRIDGE_HTTP}/api/registry/list`);
         if (!res.ok) throw new Error("Could not load registry");
         const components = await res.json();
         
