@@ -1323,7 +1323,8 @@ window.openHardwareLibrary = async () => {
     try {
         const res = await fetch(`${BRIDGE_HTTP}/api/registry/list`);
         if (!res.ok) throw new Error("Could not load registry");
-        const components = await res.json();
+        const data = await res.json();
+        const components = data.components || [];
         
         let html = '';
         components.forEach(comp => {
