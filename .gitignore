@@ -14,3 +14,7 @@ google-services.json
 *.hprof
 *.jks
 *.keystore
+
+# Python & Secrets
+.env
+__pycache__/
