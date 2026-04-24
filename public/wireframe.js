@@ -7,7 +7,8 @@ export class WireframeOverlay {
         
         let proxyIp = localStorage.getItem('pi_ip') || '192.168.0.28';
         proxyIp = proxyIp.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
-        this.infernoApi = `http://${proxyIp}:9500`;
+        // Use the current origin so it respects HTTPS on mobile devices
+        this.infernoApi = window.location.origin;
         
         this.offsetX = 0;
         this.offsetY = 0;

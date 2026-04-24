@@ -726,8 +726,8 @@ window.toggleBenchCam = () => {
         const updateCam = async () => {
             if (!isBenchCamActive) return;
             try {
-                // Route correctly to the fast api server on 9500
-                const infernoHttp = "http://" + (localStorage.getItem('pi_ip') || '192.168.0.28') + ":9500";
+                // Route correctly to the fast api server on 9500 using the current origin to support HTTPS
+                const infernoHttp = window.location.origin;
                 const res = await fetch(`${infernoHttp}/api/camera/bench-snap?t=${Date.now()}`);
                 if (!res.ok) throw new Error("Bench cam temporarily unavailable");
                 const blob = await res.blob();
