@@ -18,7 +18,7 @@ export async function initAssemblyMode(activeData = []) {
   let savedPiIp = localStorage.getItem('pi_ip') || '192.168.0.28';
   savedPiIp = savedPiIp.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
 
-  const INFERNO_URL = `http://${savedPiIp}:20119`;
+  const INFERNO_URL = `http://${savedPiIp}:9500`;
   const BRIDGE_URL = window.location.origin;
   
   // Try mapping the live AR components against the Python Server's Database!
