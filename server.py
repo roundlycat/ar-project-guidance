@@ -171,11 +171,33 @@ async def proxy_stream(ip: str = "192.168.0.24"):
     )
 
 # ----------------- REGISTRY ENDPOINTS -----------------
+import websockets
 import uuid
 import json
 import datetime
 import psycopg2
 from registry_intake import DB_DSN, _embed, log
+
+@app.websocket("/ws/device/{device_id}")
+async def proxy_ws_device(websocket: WebSocket, device_id: str, ip: str = "192.168.0.28"):
+    """Server-side proxy to tunnel the WebSocket stream through the HTTPS server."""
+    await websocket.accept()
+    target_uri = f"ws://{ip}:8766/ws/device/{device_id}"
+    try:
+        async with websockets.connect(target_uri) as target_ws:
+            while True:
+                msg = await target_ws.recv()
+                await websocket.send_text(msg)
+    except websockets.exceptions.ConnectionClosed:
+        pass
+    except Exception as e:
+        log.error(f"WebSocket Proxy Error: {e}")
+    finally:
+        try:
+            await websocket.close()
+        except:
+            pass
+
 
 # We no longer use local json file, but direct PostgreSQL insertion via registry_intake's DSN
 

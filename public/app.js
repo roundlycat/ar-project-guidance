@@ -141,7 +141,7 @@ function subscribeToDevice(deviceId) {
     if (activeSockets[deviceId]) return; // Already subscribed
 
     log(`Connecting to Narrow View for ${deviceId}...`);
-    const ws = new WebSocket(`${BRIDGE_WS}/ws/device/${deviceId}`);
+    const ws = new WebSocket(`${BRIDGE_WS}/ws/device/${deviceId}?ip=${savedPiIp}`);
 
     ws.onmessage = (event) => {
         try {
