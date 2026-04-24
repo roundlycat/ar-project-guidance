@@ -9,3 +9,4 @@ python-multipart
 sentence-transformers
 google-genai
 pgvector
+python-dotenv

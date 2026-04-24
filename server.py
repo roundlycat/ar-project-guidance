@@ -2,6 +2,9 @@ import os
 import base64
 import json
 import httpx
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, Header, HTTPException, Response, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
