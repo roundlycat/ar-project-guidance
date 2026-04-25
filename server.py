@@ -17,11 +17,19 @@ app = FastAPI(title="AR Guidance Server")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.0\.\d+)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+import unicodedata
+
+def sanitize_text(text: str) -> str:
+    """Strip unsafe unicode chars that crash E-Ink dashboards and downstream consumers."""
+    if not text:
+        return ""
+    return unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('utf-8')
 
 app.include_router(registry_router)
 
@@ -331,10 +339,10 @@ async def add_registry(request: Request):
     data = await request.json()
     
     # Payload from app.js: { "display_name": "...", "notes": "...", "device_type": "...", "cv_labels": [...] }
-    label = data.get("display_name") or data.get("label", "Unknown Component")
-    notes = data.get("notes", "")
-    device_type = data.get("device_type", "")
-    cv_labels = data.get("cv_labels", [])
+    label = sanitize_text(data.get("display_name") or data.get("label", "Unknown Component"))
+    notes = sanitize_text(data.get("notes", ""))
+    device_type = sanitize_text(data.get("device_type", ""))
+    cv_labels = [sanitize_text(l) for l in data.get("cv_labels", [])]
     # Tags: merge device_type + cv_labels for searchability
     tags = list(set(filter(None, [device_type] + cv_labels)))
     
@@ -441,9 +449,9 @@ async def guide_save(request: Request):
     'ar-guide' so it can be retrieved by future semantic lookups.
     """
     data = await request.json()
-    question = data.get("question", "")
-    answer = data.get("answer", "")
-    components = data.get("components", [])  # list of corrected label strings
+    question = sanitize_text(data.get("question", ""))
+    answer = sanitize_text(data.get("answer", ""))
+    components = [sanitize_text(c) for c in data.get("components", [])]  # list of corrected label strings
     corrections = data.get("corrections", [])
     
     if not answer:

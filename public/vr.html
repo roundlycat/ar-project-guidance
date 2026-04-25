@@ -164,6 +164,21 @@
   let componentCache = [];
   let dpadPressed = false;
 
+  // Drift Metrics for Haptics
+  let latestTracking = [];
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const trackingWs = new WebSocket(`${wsProtocol}//${window.location.host}/ws/tracking`);
+  trackingWs.onmessage = (event) => {
+      try {
+          const data = JSON.parse(event.data);
+          if (data && data.components) {
+              latestTracking = data.components;
+          }
+      } catch (e) {
+          console.error("WS parse error", e);
+      }
+  };
+
   // Xbox Controller / Gamepad API Integration & Haptics
   function pollGamepad() {
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -181,18 +196,34 @@
               
               dpadPressed = true;
               renderWireframeCache();
-              
-              // Trigger physical Xbox Controller Rumble upon locking a new AR Target!
-              if (gp.vibrationActuator) {
-                  try {
-                      gp.vibrationActuator.playEffect("dual-rumble", {
-                          startDelay: 0, duration: 80, weakMagnitude: 0.9, strongMagnitude: 0.2
-                      });
-                  } catch(e) { console.warn("Haptics unavailable."); }
-              }
-              
           } else if (!rightPush && !leftPush) {
               dpadPressed = false;
+          }
+
+          // --- UNCERTAINTY HAPTICS ---
+          // Map semantic drift to strong motor (left) and spatial drift to weak motor (right)
+          const targetedComp = componentCache[activeTargetIndex];
+          if (targetedComp && gp.vibrationActuator) {
+              const trackingHit = latestTracking.find(t => t.label === targetedComp.label);
+              
+              // Only apply continuous drift haptics if we have valid tracking data
+              if (trackingHit) {
+                  // Semantic heartbeat: pulse magnitude based on semantic drift
+                  let semanticMag = Math.min(Math.max(trackingHit.semantic_drift || 0, 0), 1.0);
+                  // Spatial jitter: rapid high-freq magnitude based on spatial drift
+                  let spatialMag = Math.min(Math.max(trackingHit.spatial_drift || 0, 0), 1.0);
+
+                  // Apply rumble if drift is non-negligible
+                  if (semanticMag > 0.1 || spatialMag > 0.1) {
+                      try {
+                          gp.vibrationActuator.playEffect("dual-rumble", {
+                              startDelay: 0, duration: 50, 
+                              strongMagnitude: semanticMag, // left motor: semantic
+                              weakMagnitude: spatialMag     // right motor: spatial
+                          });
+                      } catch(e) {}
+                  }
+              }
           }
       }
       requestAnimationFrame(pollGamepad);
@@ -290,41 +321,23 @@
       const b64Image = captureInternalFrame();
       if (!b64Image) return; // Wait for camera to boot
       
-      const promptText = `
-        Analyze this POV electronics workbench image. 
-        Identify all electronic components (e.g. Microcontrollers, ICs, Sensors, Breakouts).
-        Return ONLY a raw JSON object matching this schema:
-        { "components": [ { "type": "string", "label": "string", "box": {"ymin": float (0.0 to 1.0), "xmin": float, "ymax": float, "xmax": float} } ] }
-      `;
-      
-      const payload = {
-          "contents": [{
-              "parts": [
-                  {"text": promptText},
-                  {"inline_data": {"mime_type": "image/jpeg", "data": b64Image}}
-              ]
-          }],
-          "generationConfig": { "response_mime_type": "application/json", "temperature": 0.1 }
-      };
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      // Hit the local HTTPS proxy so it can calculate Epistemic Drift and broadcast it to our Haptics WS!
+      const res = await fetch(`/api/camera/analyse`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: { 
+              'Content-Type': 'application/json',
+              'x-gemini-key': apiKey 
+          },
+          body: JSON.stringify({ image_base64: b64Image })
       });
       
       if (!res.ok) throw new Error(`Client Vision Sync Failed: ${res.status}`);
       const data = await res.json();
       
-      if (data && data.candidates && data.candidates.length > 0) {
-          const rawText = data.candidates[0].content.parts[0].text;
-          const cleanJson = JSON.parse(rawText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim() || rawText);
-          
-          if (cleanJson.components && cleanJson.components.length > 0) {
-              componentCache = cleanJson.components;
-              if (activeTargetIndex >= componentCache.length) activeTargetIndex = 0;
-              renderWireframeCache();
-          }
+      if (data && data.components && data.components.length > 0) {
+          componentCache = data.components;
+          if (activeTargetIndex >= componentCache.length) activeTargetIndex = 0;
+          renderWireframeCache();
       }
     } catch(e) {
         console.warn("Autonomous Ghost Mode Warning:", e);
