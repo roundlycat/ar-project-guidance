@@ -44,6 +44,51 @@ class Component(BaseModel):
     box: BoundingBox
     notes: Optional[str] = None
     wiring: List[WiringConnection] = Field(default_factory=list)
+    confidence: float = Field(default=1.0, description="0.0 to 1.0 representing certainty")
+
+import math
+
+class EpistemicDriftCalculator:
+    def __init__(self):
+        self.history = {} # label -> list of center points (x, y)
+        self.max_history = 5
+        self.confidence_history = {} # label -> list of confidence values
+
+    def update(self, label: str, box: BoundingBox, confidence: float):
+        cx = (box.xmin + box.xmax) / 2.0
+        cy = (box.ymin + box.ymax) / 2.0
+        
+        if label not in self.history:
+            self.history[label] = []
+            self.confidence_history[label] = []
+            
+        self.history[label].append((cx, cy))
+        self.confidence_history[label].append(confidence)
+        
+        if len(self.history[label]) > self.max_history:
+            self.history[label].pop(0)
+            self.confidence_history[label].pop(0)
+            
+    def get_spatial_drift(self, label: str) -> float:
+        pts = self.history.get(label, [])
+        if len(pts) < 2:
+            return 0.0
+        total_dist = 0.0
+        for i in range(1, len(pts)):
+            dx = pts[i][0] - pts[i-1][0]
+            dy = pts[i][1] - pts[i-1][1]
+            total_dist += math.sqrt(dx*dx + dy*dy)
+        avg_dist = total_dist / (len(pts) - 1)
+        return min(avg_dist * 2.0, 1.0)
+        
+    def get_semantic_drift(self, label: str) -> float:
+        confs = self.confidence_history.get(label, [])
+        if not confs:
+            return 0.0
+        avg_conf = sum(confs) / len(confs)
+        return 1.0 - avg_conf
+
+drift_calc = EpistemicDriftCalculator()
 
 class CameraAnalysisResponse(BaseModel):
     components: List[Component]
@@ -80,7 +125,8 @@ async def analyse_camera(req: Optional[CameraAnalyseRequest] = None, x_gemini_ke
            "label": "string (e.g., ESP32, BME680, Breadboard)",
            "box": {"ymin": float (0.0 to 1.0), "xmin": float, "ymax": float, "xmax": float},
            "notes": "string (condition or visual details)",
-           "wiring": [{"pin": "string (e.g. GND)", "connected_to": "string", "wire_color": "string (e.g., red, blue, green)"}]
+           "wiring": [{"pin": "string (e.g. GND)", "connected_to": "string", "wire_color": "string (e.g., red, blue, green)"}],
+           "confidence": float (between 0.0 and 1.0, representing certainty of component identification)
         }
       ]
     }
@@ -112,6 +158,22 @@ async def analyse_camera(req: Optional[CameraAnalyseRequest] = None, x_gemini_ke
             text_response = text_response.replace("```json", "").replace("```", "").strip()
             parsed = json.loads(text_response)
             validated = CameraAnalysisResponse(**parsed)
+            
+            # --- DRIFT CALCULATION AND BROADCAST ---
+            tracking_components = []
+            for comp in validated.components:
+                drift_calc.update(comp.label, comp.box, comp.confidence)
+                tracking_components.append({
+                    "label": comp.label,
+                    "type": comp.type,
+                    "box": comp.box.model_dump(),
+                    "semantic_drift": drift_calc.get_semantic_drift(comp.label),
+                    "spatial_drift": drift_calc.get_spatial_drift(comp.label)
+                })
+            
+            # Broadcast to Unity AR Client in the background
+            asyncio.create_task(broadcast_tracking(tracking_components))
+            
             return validated
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to parse or validate Gemini response: {e}\nRaw text: {data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')}")
