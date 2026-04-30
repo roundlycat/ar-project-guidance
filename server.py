@@ -641,6 +641,7 @@ if os.path.exists(frontend_path):
 async def inject_remainder(request: Request):
     data = await request.json()
     note = sanitize_text(data.get("note", ""))
+    sensor_id = sanitize_text(data.get("sensor_id", "global_scene"))
     
     if not note:
         return {"status": "error", "message": "Empty remainder"}
@@ -665,7 +666,7 @@ async def inject_remainder(request: Request):
             cur.execute("""
                 INSERT INTO sensor_interpretation (source_id, sensor_id, embodied_remainder)
                 VALUES (%s, %s, %s)
-            """, (source_id, "global_scene", note))
+            """, (source_id, sensor_id, note))
             
         conn.commit()
         conn.close()
