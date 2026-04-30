@@ -662,10 +662,10 @@ async def inject_remainder(request: Request):
                 source_id = cur.fetchone()[0]
                 
             # Insert the embodied remainder
-            cur.execute(\"\"\"
+            cur.execute("""
                 INSERT INTO sensor_interpretation (source_id, sensor_id, embodied_remainder)
                 VALUES (%s, %s, %s)
-            \"\"\", (source_id, "global_scene", note))
+            """, (source_id, "global_scene", note))
             
         conn.commit()
         conn.close()
