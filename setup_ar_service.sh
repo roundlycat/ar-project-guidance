@@ -34,7 +34,7 @@ WorkingDirectory=$WORKING_DIR
 Environment="PATH=$WORKING_DIR/venv/bin"
 # Ensure environment variables are loaded from .env if present
 EnvironmentFile=-$WORKING_DIR/.env
-ExecStart=$WORKING_DIR/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000
+ExecStart=$WORKING_DIR/venv/bin/uvicorn server:app --host 0.0.0.0 --port 9500
 Restart=always
 RestartSec=5
 
