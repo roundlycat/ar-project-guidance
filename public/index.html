@@ -38,6 +38,32 @@
   <!-- Move Wireframe completely outside nested video container stacking context! -->
   <div id="wireframe-panel" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 15; pointer-events: none;"></div>
 
+  <!-- Ask Guide Modal (Hidden by default) -->
+  <div id="ask-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel" style="border-top: 1px solid rgba(167, 139, 250, 0.3);">
+      <h3>Consult AI Guide</h3>
+      <p style="font-size: 0.8rem; color: #aaa; margin-bottom: 12px;">Ask a question based on the current scene context.</p>
+      <textarea id="ask-input" class="modern-input" placeholder="e.g., What is the most critical issue here?" rows="3" style="width: 100%; resize: vertical;"></textarea>
+      <div class="modal-actions">
+        <button class="action-btn outline" onclick="closeAskModal()">Cancel</button>
+        <button class="action-btn" style="background: rgba(167, 139, 250, 0.2); border: 1px solid #a78bfa; color: #e9d5ff;" onclick="submitQuestion()">Ask</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Embodied Remainder Modal (Hidden by default) -->
+  <div id="remainder-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel kintsugi-highlight">
+      <h3 class="kintsugi-text">Inject Embodied Remainder</h3>
+      <p style="font-size: 0.8rem; color: #aaa; margin-bottom: 12px;">Record the sensory context that sensors and AI failed to capture.</p>
+      <textarea id="remainder-input" class="modern-input" placeholder="e.g., There is a faint smell of ozone, and the casing feels warm..." rows="3" style="width: 100%; resize: vertical;"></textarea>
+      <div class="modal-actions">
+        <button class="action-btn outline" onclick="closeRemainderModal()">Cancel</button>
+        <button class="action-btn" style="background: rgba(212, 175, 55, 0.2); border: 1px solid #d4af37; color: #f1c40f;" onclick="submitRemainder()">Inject</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Assembly Mode UI Layer (Hidden by default, overlays above everything) -->
   <div id="assembly-mode-panel" class="hidden">
     <!-- Top bar -->
@@ -57,7 +83,6 @@
       <div class="session-dot"></div>
       <span>parts detected:</span>
       <span class="session-part">D1 Mini (ESP8266)</span>
-      <span class="session-sep">+</span>
       <span class="session-part">BME280</span>
       <span class="session-sep">·</span>
       <span>interface: I²C · 3.3V · addr 0x76</span>
@@ -266,6 +291,12 @@
         <button class="action-btn outline" style="flex: 1; padding: 0.6rem; background: rgba(167, 139, 250, 0.1); border-color: #a78bfa; color: #d8b4fe; display: none;" id="ask-guide-btn" onclick="askGuide()">Ask AI Guide</button>
       </div>
       <button class="action-btn primary" style="margin-top: 8px;" id="scan-toggle-btn" onclick="triggerSingleScan()">Capture & Analyze Scene</button>
+      
+      <div style="display: flex; gap: 8px; width: 100%; margin-top: 8px;">
+        <button class="action-btn outline kintsugi-text" style="flex: 1; border-color: rgba(212, 175, 55, 0.5);" id="inject-remainder-btn" onclick="openRemainderModal()">📝 Remainder</button>
+        <button class="action-btn outline kintsugi-text" style="flex: 1; border-color: rgba(212, 175, 55, 0.5);" id="mic-remainder-btn" onclick="toggleDictation()">🎤 Dictate</button>
+      </div>
+
       <div id="error-msg" class="error-msg hidden"></div>
     </footer>
   </div>

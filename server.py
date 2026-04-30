@@ -636,3 +636,42 @@ Respond ONLY with the complete valid JSON object. Do not include markdown codebl
 frontend_path = os.path.join(os.path.dirname(__file__), "public")
 if os.path.exists(frontend_path):
     app.mount("/ar-app", StaticFiles(directory=frontend_path, html=True), name="ar-app")
+
+@app.post("/api/remainder")
+async def inject_remainder(request: Request):
+    data = await request.json()
+    note = sanitize_text(data.get("note", ""))
+    
+    if not note:
+        return {"status": "error", "message": "Empty remainder"}
+        
+    try:
+        conn = psycopg2.connect(DB_DSN)
+        with conn.cursor() as cur:
+            # Ensure the tables exist
+            with open("001_relational_identity.sql", "r") as f:
+                cur.execute(f.read())
+                
+            # Get or create the human source
+            cur.execute("SELECT id FROM interpretation_source WHERE source_name = 'human_operator' LIMIT 1")
+            row = cur.fetchone()
+            if row:
+                source_id = row[0]
+            else:
+                cur.execute("INSERT INTO interpretation_source (source_name, source_type) VALUES ('human_operator', 'human') RETURNING id")
+                source_id = cur.fetchone()[0]
+                
+            # Insert the embodied remainder
+            cur.execute(\"\"\"
+                INSERT INTO sensor_interpretation (source_id, sensor_id, embodied_remainder)
+                VALUES (%s, %s, %s)
+            \"\"\", (source_id, "global_scene", note))
+            
+        conn.commit()
+        conn.close()
+        log.info(f"Embodied remainder injected: {note[:50]}...")
+        return {"status": "success"}
+    except Exception as e:
+        log.error(f"Failed to inject remainder: {e}")
+        return {"status": "error", "message": str(e)}
+

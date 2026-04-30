@@ -1428,3 +1428,220 @@ window.savePassportNotes = async () => {
         }, 2000);
     }
 };
+
+/* ========================================================= */
+/* PALIMPSEST & EMBODIED REMAINDER LOGIC                     */
+/* ========================================================= */
+
+window.openRemainderModal = function() {
+    const modal = document.getElementById('remainder-modal');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    document.getElementById('remainder-input').value = '';
+    document.getElementById('remainder-input').focus();
+};
+
+window.closeRemainderModal = function() {
+    const modal = document.getElementById('remainder-modal');
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+};
+
+window.submitRemainder = async function() {
+    const input = document.getElementById('remainder-input').value;
+    if (!input.trim()) return;
+
+    try {
+        const response = await fetch('/api/remainder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                note: input, 
+                timestamp: new Date().toISOString()
+            })
+        });
+
+        if (response.ok) {
+            window.closeRemainderModal();
+            log("Embodied remainder injected into palimpsest.");
+            
+            // Show Kintsugi visual feedback
+            const btn = document.getElementById('inject-remainder-btn');
+            btn.textContent = "Injected!";
+            setTimeout(() => {
+                btn.textContent = "+ Embodied Remainder";
+            }, 2000);
+            
+            // Add a ghosted text layer on screen
+            addGhostedRemainder(input);
+        } else {
+            throw new Error('Failed to submit remainder');
+        }
+    } catch (e) {
+        console.error("Remainder injection error:", e);
+        alert("Failed to inject remainder. See console.");
+    }
+};
+
+function addGhostedRemainder(text) {
+    const layer = document.getElementById('palimpsest-overlay');
+    if (!layer) return;
+    
+    const el = document.createElement('div');
+    el.className = 'ghost-text';
+    el.textContent = text;
+    el.style.left = Math.random() * 60 + 20 + '%';
+    el.style.top = Math.random() * 60 + 20 + '%';
+    // Slight random rotation
+    el.style.transform = otate(deg);
+    
+    layer.appendChild(el);
+    
+    // Fade out very slowly
+    setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => {
+            el.remove();
+        }, 5000);
+    }, 15000); // 15 seconds visibility
+}
+
+// Ask Guide logic placeholders
+window.openAskModal = function() {
+    const modal = document.getElementById('ask-modal');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+};
+
+window.closeAskModal = function() {
+    const modal = document.getElementById('ask-modal');
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+};
+
+window.submitQuestion = function() {
+    window.closeAskModal();
+};
+
+
+/* ========================================================= */
+/* WEB SPEECH API - EXPERIENTIAL INJECTION                   */
+/* ========================================================= */
+
+let speechRecognition = null;
+let isDictating = false;
+
+function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        log("Web Speech API not supported in this browser.");
+        return false;
+    }
+    
+    speechRecognition = new SpeechRecognition();
+    speechRecognition.continuous = true;
+    speechRecognition.interimResults = false; // Only trigger when sentence is finished
+    speechRecognition.lang = 'en-US';
+
+    speechRecognition.onstart = function() {
+        isDictating = true;
+        updateMicButton();
+        log("Listening for embodied remainder...");
+    };
+
+    speechRecognition.onresult = function(event) {
+        let finalTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+            }
+        }
+        
+        if (finalTranscript.trim()) {
+            log("Heard: " + finalTranscript.trim());
+            submitDictatedRemainder(finalTranscript.trim());
+        }
+    };
+
+    speechRecognition.onerror = function(event) {
+        console.error("Speech recognition error:", event.error);
+        if (event.error === 'not-allowed' || event.error === 'network') {
+            isDictating = false;
+            updateMicButton();
+        }
+    };
+
+    speechRecognition.onend = function() {
+        // If it was manually stopped, it stays false. Otherwise it stopped due to silence.
+        isDictating = false;
+        updateMicButton();
+        log("Dictation ended.");
+    };
+    
+    return true;
+}
+
+function updateMicButton() {
+    const btn = document.getElementById('mic-remainder-btn');
+    if(!btn) return;
+    if (isDictating) {
+        btn.innerHTML = '?? Listening...';
+        btn.style.backgroundColor = 'rgba(212, 175, 55, 0.2)';
+    } else {
+        btn.innerHTML = '?? Dictate';
+        btn.style.backgroundColor = 'transparent';
+    }
+}
+
+window.toggleDictation = function() {
+    if (!speechRecognition) {
+        const supported = initSpeechRecognition();
+        if (!supported) {
+            alert("Speech recognition not supported in this browser. Try Chrome on Android or Desktop.");
+            return;
+        }
+    }
+    
+    if (isDictating) {
+        speechRecognition.stop();
+    } else {
+        try {
+            speechRecognition.start();
+        } catch(e) {
+            console.error("Error starting speech recognition:", e);
+        }
+    }
+};
+
+async function submitDictatedRemainder(text) {
+    if (!text) return;
+
+    try {
+        const response = await fetch('/api/remainder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                note: "[Voice] " + text, 
+                timestamp: new Date().toISOString()
+            })
+        });
+
+        if (response.ok) {
+            addGhostedRemainder(text);
+            
+            // Visual pulse on the mic button
+            const btn = document.getElementById('mic-remainder-btn');
+            if(btn) {
+                const oldText = btn.innerHTML;
+                btn.innerHTML = '? Injected!';
+                setTimeout(() => {
+                    updateMicButton(); // Restore state based on isDictating
+                }, 1500);
+            }
+        }
+    } catch (e) {
+        console.error("Voice injection error:", e);
+    }
+}
+
