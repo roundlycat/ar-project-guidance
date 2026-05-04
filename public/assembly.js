@@ -63,12 +63,31 @@ export async function initAssemblyMode(activeData = []) {
       dbMatchedParts = ["D1 Mini", "BME280"]; // Fallback generic mock if nothing detected
   }
   
+  // Show goal input in the session bar area
+  const sessionBar = document.querySelector('.session-bar');
+  const goalInput = document.createElement('div');
+  goalInput.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-top: 8px; width: 100%;';
+  goalInput.innerHTML = `
+    <input type="text" id="assembly-goal-input" class="assembly-goal-input" 
+           placeholder="Goal: e.g., Build an I2C sensor node for temperature monitoring..."
+           value="Connect these components logically for a sensor node.">
+    <button class="nav-btn primary" style="white-space: nowrap; padding: 8px 16px;" 
+            onclick="document.getElementById('assembly-goal-input').closest('div').style.display='none'; window.regenerateAssembly();">
+      Generate
+    </button>
+  `;
+  if (sessionBar) sessionBar.parentNode.insertBefore(goalInput, sessionBar.nextSibling);
+  
+  // Store parts globally for regeneration
+  window._assemblyParts = dbMatchedParts;
+
   // Call AI generative step composer setup
+  const goal = document.getElementById('assembly-goal-input')?.value || 'Connect these components logically for a sensor node.';
   try {
       const composeRes = await fetch(`${INFERNO_URL}/api/assembly/generate`, {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ components: dbMatchedParts })
+          body: JSON.stringify({ components: dbMatchedParts, goal: goal })
       });
       if (composeRes.ok) {
           const generatedPayload = await composeRes.json();
@@ -83,6 +102,40 @@ export async function initAssemblyMode(activeData = []) {
   
   applyStep(0);
 }
+
+// Re-generate assembly with updated goal
+window.regenerateAssembly = async function() {
+  const goal = document.getElementById('assembly-goal-input')?.value || 'Connect these components logically for a sensor node.';
+  const parts = window._assemblyParts || ['D1 Mini', 'BME280'];
+  
+  document.querySelector('.cards-row').innerHTML = `
+    <div style="padding: 24px; color: var(--text-dim); text-align: center; width: 100%; font-family: monospace;">
+      <div class="loader" style="margin: 0 auto 12px auto; display: block;">
+        <div class="bounce1"></div>
+        <div class="bounce2"></div>
+        <div class="bounce3"></div>
+      </div>
+      Re-generating wiring schema for: ${goal.substring(0, 60)}...
+    </div>
+  `;
+  
+  try {
+    const composeRes = await fetch(`${window.location.origin}/api/assembly/generate`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ components: parts, goal: goal })
+    });
+    if (composeRes.ok) {
+      const generatedPayload = await composeRes.json();
+      document.querySelector('.cards-row').innerHTML = generatedPayload.cards_html;
+      assemblySteps = generatedPayload.steps;
+      curStep = 0;
+      applyStep(0);
+    }
+  } catch(e) {
+    console.warn("Regeneration failed", e);
+  }
+};
 
 export function exitAssemblyMode() {
   document.getElementById('assembly-mode-panel').classList.add('hidden');

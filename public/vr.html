@@ -82,6 +82,18 @@
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
     }
+
+    .connection-badge {
+        position: absolute; top: 10px; left: 10px;
+        font-family: 'Outfit', sans-serif; font-size: 0.7rem;
+        padding: 3px 10px; border-radius: 12px;
+        background: rgba(0,0,0,0.6); color: #888;
+        border: 1px solid rgba(255,255,255,0.1);
+        z-index: 20;
+        transition: all 0.3s ease;
+    }
+    .connection-badge.connected { color: #00e5ff; border-color: rgba(0,229,255,0.3); }
+    .connection-badge.reconnecting { color: #ffd166; border-color: rgba(255,209,102,0.3); animation: flash 1.5s infinite; }
   </style>
 </head>
 <body>
@@ -91,6 +103,7 @@
   <div class="eye-panel" id="left-eye">
     <video autoplay playsinline muted></video>
     <div class="hud-layer">
+      <div class="connection-badge" id="left-conn-badge">LINKING...</div>
       <div class="warning-banner">LINK SEVERED</div>
       <div class="wireframe-container" id="left-wireframes" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
       <div class="reticle"></div>
@@ -105,6 +118,7 @@
   <div class="eye-panel" id="right-eye">
     <video autoplay playsinline muted></video>
     <div class="hud-layer">
+      <div class="connection-badge" id="right-conn-badge">LINKING...</div>
       <div class="warning-banner">LINK SEVERED</div>
       <div class="wireframe-container" id="right-wireframes" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
       <div class="reticle"></div>
@@ -166,18 +180,68 @@
 
   // Drift Metrics for Haptics
   let latestTracking = [];
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const trackingWs = new WebSocket(`${wsProtocol}//${window.location.host}/ws/tracking`);
-  trackingWs.onmessage = (event) => {
+  let trackingWs = null;
+  let wsReconnectTimer = null;
+  let wsReconnectAttempts = 0;
+  const MAX_RECONNECT_ATTEMPTS = 20;
+
+  function connectTrackingWs() {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       try {
-          const data = JSON.parse(event.data);
-          if (data && data.components) {
-              latestTracking = data.components;
-          }
+          trackingWs = new WebSocket(`${wsProtocol}//${window.location.host}/ws/tracking`);
       } catch (e) {
-          console.error("WS parse error", e);
+          console.warn('WS connection failed:', e);
+          scheduleReconnect();
+          return;
       }
-  };
+
+      trackingWs.onopen = () => {
+          console.log('Tracking WS connected');
+          wsReconnectAttempts = 0;
+          updateConnectionBadge('connected', 'LINKED');
+      };
+
+      trackingWs.onmessage = (event) => {
+          try {
+              const data = JSON.parse(event.data);
+              if (data && data.components) {
+                  latestTracking = data.components;
+              }
+          } catch (e) {
+              console.error("WS parse error", e);
+          }
+      };
+
+      trackingWs.onclose = () => {
+          console.warn('Tracking WS closed');
+          updateConnectionBadge('reconnecting', 'RECONNECTING...');
+          scheduleReconnect();
+      };
+
+      trackingWs.onerror = () => {
+          updateConnectionBadge('reconnecting', 'WS ERROR');
+      };
+  }
+
+  function scheduleReconnect() {
+      if (wsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+          updateConnectionBadge('', 'LINK FAILED');
+          return;
+      }
+      const delay = Math.min(1000 * Math.pow(1.5, wsReconnectAttempts), 30000);
+      wsReconnectAttempts++;
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = setTimeout(connectTrackingWs, delay);
+  }
+
+  function updateConnectionBadge(cls, text) {
+      ['left-conn-badge', 'right-conn-badge'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) { el.className = 'connection-badge ' + cls; el.textContent = text; }
+      });
+  }
+
+  connectTrackingWs();
 
   // Xbox Controller / Gamepad API Integration & Haptics
   function pollGamepad() {
@@ -352,7 +416,13 @@
   bootOptics();
   pollGamepad();
   setInterval(syncTelemetry, 2000);
-  setInterval(syncGhostWireframes, 5000); 
+  setInterval(syncGhostWireframes, 5000);
+
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+      clearTimeout(wsReconnectTimer);
+      if (trackingWs) trackingWs.close();
+  });
 </script>
 
 </body>

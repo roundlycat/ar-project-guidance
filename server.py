@@ -637,6 +637,65 @@ frontend_path = os.path.join(os.path.dirname(__file__), "public")
 if os.path.exists(frontend_path):
     app.mount("/ar-app", StaticFiles(directory=frontend_path, html=True), name="ar-app")
 
+@app.get("/api/health")
+async def health_check():
+    """Return status of all backend services for the frontend System Health Dashboard."""
+    import time
+    services = {}
+    
+    # Check Bench Cam
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        try:
+            r = await client.get(BENCH_CAM_URL)
+            services["bench_cam"] = {"status": "ok" if r.is_success else "warn", "label": "Bench Camera"}
+        except Exception:
+            services["bench_cam"] = {"status": "error", "label": "Bench Camera"}
+    
+    # Check Ecology Dashboard (Inferno Pi)
+    ip = os.getenv("PI_IP", "192.168.0.28")
+    ecology_ok = False
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        for ep in [f"http://{ip}:8000/api/stats/ecology", f"http://{ip}:9500/api/stats/ecology"]:
+            try:
+                r = await client.get(ep)
+                if r.status_code == 200:
+                    ecology_ok = True
+                    break
+            except Exception:
+                continue
+    services["ecology"] = {"status": "ok" if ecology_ok else "error", "label": "Sensor Ecology"}
+    
+    # Check PostgreSQL via Ecology API (indirect — the ecology API uses postgres)
+    pg_ok = False
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        try:
+            r = await client.get(f"http://{ip}:8000/api/registry/list")
+            pg_ok = r.status_code == 200
+        except Exception:
+            pass
+    services["postgres"] = {"status": "ok" if pg_ok else "error", "label": "PostgreSQL"}
+    
+    # WS Bridge
+    ws_status = "warn"
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        try:
+            r = await client.get(f"http://{ip}:8766/")
+            ws_status = "ok"
+        except Exception:
+            ws_status = "warn"
+    services["ws_bridge"] = {"status": ws_status, "label": "WS Bridge"}
+    
+    # Gemini API Key configured?
+    has_key = bool(os.getenv("GEMINI_API_KEY"))
+    services["gemini"] = {"status": "ok" if has_key else "warn", "label": "Gemini API", "note": "Key set via env" if has_key else "Key required from client"}
+    
+    # Server uptime
+    services["server"] = {"status": "ok", "label": "AR Server"}
+    
+    from datetime import datetime
+    return {"services": services, "timestamp": datetime.now().isoformat()}
+
+
 @app.post("/api/remainder")
 async def inject_remainder(request: Request):
     data = await request.json()

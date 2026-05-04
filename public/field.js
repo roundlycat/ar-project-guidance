@@ -33,6 +33,26 @@ async function startMacroCamera() {
             videoDevices = devices.filter(device => device.kind === 'videoinput');
         }
 
+        // Check if torch is available and add toggle button if so
+        const track = videoStream.getVideoTracks()[0];
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.torch) {
+            if (!document.getElementById('torch-btn')) {
+                const torchBtn = document.createElement('button');
+                torchBtn.id = 'torch-btn';
+                torchBtn.innerHTML = '\uD83D\uDD26 Torch';
+                torchBtn.title = 'Toggle flashlight for macro detail';
+                torchBtn.style.cssText = 'position: absolute; left: calc(50% + 70px); top: 13px; height: 50px; padding: 0 16px; border-radius: 25px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; font-size: 0.85em; z-index: 20; font-family: Outfit, sans-serif;';
+                torchBtn.onclick = async () => {
+                    const currentTorch = track.getSettings().torch || false;
+                    await track.applyConstraints({ advanced: [{ torch: !currentTorch }] });
+                    torchBtn.style.background = !currentTorch ? 'rgba(255,209,102,0.3)' : 'rgba(255,255,255,0.1)';
+                    torchBtn.style.borderColor = !currentTorch ? '#ffd166' : 'rgba(255,255,255,0.2)';
+                };
+                shutterBtnContainer.appendChild(torchBtn);
+            }
+        }
+
     } catch (e) {
         console.error("Camera access failed", e);
         resultsDiv.style.display = 'block';

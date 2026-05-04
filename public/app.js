@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     initCamera();
     startSensorSimulation();
+    startHealthCheck();
 });
 
 const videoElement = document.getElementById('camera-stream');
@@ -163,24 +164,55 @@ function subscribeToDevice(deviceId) {
 }
 
 // Real-time sensor polling from the Pi 5 macroscopic dashboard
+let lastEcologyUpdate = 0;
+
 function startSensorSimulation() {
     // Poll every 2.5 seconds for fresh global data
     setInterval(async () => {
         try {
             const response = await fetch(API_URL);
-            if (!response.ok) return;
+            if (!response.ok) {
+                updateEcologyPulse(false);
+                return;
+            }
             const data = await response.json();
+            updateEcologyPulse(true);
+            lastEcologyUpdate = Date.now();
 
             // 1. Airflow logic (map from active domains)
             const dimWarm = data.domain_latest?.find(d => d.domain === "dim_warm" || d.domain === "embodied_state");
             if (dimWarm && dimWarm.agent_temp_c !== undefined) {
-                airflowVal.textContent = dimWarm.agent_temp_c.toFixed(1) + ' °C';
+                const tempC = dimWarm.agent_temp_c;
+                airflowVal.textContent = tempC.toFixed(1) + ' \u00B0C';
+                // Update gauge — normalize temp 15°C–40°C range
+                const pct = Math.max(0, Math.min(100, ((tempC - 15) / 25) * 100));
+                const gauge = document.getElementById('vitals-gauge');
+                if (gauge) {
+                    gauge.style.width = pct + '%';
+                    gauge.className = 'gauge-fill' + (tempC > 30 ? ' warm' : tempC < 22 ? ' calm' : '');
+                }
             }
 
             // 2. Temperament logic (map from embodied/idle state)
             const idle = data.domain_latest?.find(d => d.domain === "idle" || d.domain === "environmental_field");
             if (idle && idle.event_label) {
-                tempVal.textContent = idle.event_label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const stateText = idle.event_label.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                tempVal.textContent = stateText;
+                // Update state gauge based on keyword
+                const stateGauge = document.getElementById('state-gauge');
+                if (stateGauge) {
+                    const lbl = idle.event_label.toLowerCase();
+                    if (lbl.includes('active') || lbl.includes('present')) {
+                        stateGauge.style.width = '80%';
+                        stateGauge.className = 'gauge-fill';
+                    } else if (lbl.includes('idle') || lbl.includes('calm')) {
+                        stateGauge.style.width = '40%';
+                        stateGauge.className = 'gauge-fill calm';
+                    } else {
+                        stateGauge.style.width = '20%';
+                        stateGauge.className = 'gauge-fill calm';
+                    }
+                }
             }
 
             // 3. Proximity / Narrative logic
@@ -198,6 +230,19 @@ function startSensorSimulation() {
 
             const isStale = (Date.now() - mostRecentTs) > 30000;
 
+            // Update freshness indicator
+            const freshnessEl = document.getElementById('vitals-freshness');
+            if (freshnessEl) {
+                if (isStale) {
+                    const secsAgo = Math.floor((Date.now() - mostRecentTs) / 1000);
+                    freshnessEl.textContent = `stale (${secsAgo}s ago)`;
+                    freshnessEl.className = 'freshness-indicator stale';
+                } else {
+                    freshnessEl.textContent = 'live';
+                    freshnessEl.className = 'freshness-indicator fresh';
+                }
+            }
+
             if (!isStale) {
                 airflowVal.classList.add('active');
                 airflowVal.classList.remove('agitated');
@@ -212,8 +257,105 @@ function startSensorSimulation() {
 
         } catch (e) {
             console.warn("Could not fetch from Pi API:", e);
+            updateEcologyPulse(false);
         }
     }, 2500);
+}
+
+function updateEcologyPulse(connected) {
+    const pulse = document.getElementById('ecology-pulse');
+    if (pulse) {
+        pulse.className = 'ecology-pulse ' + (connected ? 'connected' : 'disconnected');
+    }
+}
+
+/* ========================================================= */
+/* SYSTEM HEALTH DASHBOARD                                   */
+/* ========================================================= */
+
+function startHealthCheck() {
+    checkHealth();
+    setInterval(checkHealth, 30000); // Re-check every 30s
+}
+
+async function checkHealth() {
+    const panel = document.getElementById('health-panel');
+    if (!panel) return;
+    
+    try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/health`);
+        if (!res.ok) {
+            panel.innerHTML = '<div class="health-chip"><span class="health-dot error"></span>Backend unreachable</div>';
+            return;
+        }
+        const data = await res.json();
+        const services = data.services || {};
+        
+        let html = '';
+        for (const [key, svc] of Object.entries(services)) {
+            const statusClass = svc.status || 'error';
+            let label = svc.label || key;
+            if (svc.count !== undefined) label += ` (${svc.count})`;
+            html += `<div class="health-chip" title="${svc.error || svc.note || ''}"><span class="health-dot ${statusClass}"></span>${label}</div>`;
+        }
+        panel.innerHTML = html;
+    } catch (e) {
+        panel.innerHTML = '<div class="health-chip"><span class="health-dot error"></span>Health check failed</div>';
+    }
+}
+
+/* ========================================================= */
+/* SCAN HISTORY TIMELINE                                     */
+/* ========================================================= */
+
+let scanHistory = [];
+const MAX_SCAN_HISTORY = 8;
+
+function captureScanThumbnail(sourceElement, isBench, componentCount) {
+    try {
+        const thumbCanvas = document.createElement('canvas');
+        thumbCanvas.width = 128;
+        thumbCanvas.height = 96;
+        const tctx = thumbCanvas.getContext('2d');
+        tctx.drawImage(sourceElement, 0, 0, 128, 96);
+        const dataUrl = thumbCanvas.toDataURL('image/jpeg', 0.5);
+        
+        const entry = {
+            thumbnail: dataUrl,
+            timestamp: new Date(),
+            components: componentCount,
+            id: Date.now()
+        };
+        
+        scanHistory.unshift(entry);
+        if (scanHistory.length > MAX_SCAN_HISTORY) scanHistory.pop();
+        
+        renderScanHistory();
+    } catch (e) {
+        console.warn('Could not capture scan thumbnail:', e);
+    }
+}
+
+function renderScanHistory() {
+    const strip = document.getElementById('scan-history');
+    if (!strip) return;
+    
+    if (scanHistory.length === 0) {
+        strip.style.display = 'none';
+        return;
+    }
+    
+    strip.style.display = 'flex';
+    strip.innerHTML = scanHistory.map((entry, idx) => {
+        const time = entry.timestamp.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' });
+        return `
+            <div class="scan-thumb ${idx === 0 ? 'active' : ''}" title="${time} — ${entry.components} components">
+                <img src="${entry.thumbnail}" alt="Scan ${idx + 1}">
+                <span class="scan-time">${time}</span>
+                <span class="scan-badge">${entry.components}</span>
+            </div>
+        `;
+    }).join('');
 }
 
 // User Actions
@@ -848,6 +990,9 @@ const performSingleScan = async () => {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(sourceElement, 0, 0, imgWidth, imgHeight);
 
+        // Capture scan thumbnail for history strip before analysis
+        captureScanThumbnail(sourceElement, isBenchCamActive, 0);
+
         // Convert to base64, removing the data URL prefix
         let base64Image;
         try {
@@ -1064,6 +1209,13 @@ You must use exactly this schema:
                 // Append scene notes to the bottom
                 if (parsed.scene_notes) {
                     finalHtml += `<div style="margin-top: 8px; font-size: 0.8em; font-style: italic; opacity: 0.8; margin-left: 4px;">${parsed.scene_notes}</div>`;
+                }
+
+                // Update scan history thumbnail with component count
+                const totalDetected = (parsed.detected?.length || 0) + (parsed.unrecognized?.length || 0);
+                if (scanHistory.length > 0) {
+                    scanHistory[0].components = totalDetected;
+                    renderScanHistory();
                 }
 
                 // Only log if we actually rendered cards (in case everything was filtered out)
@@ -1493,7 +1645,8 @@ function addGhostedRemainder(text) {
     el.style.left = Math.random() * 60 + 20 + '%';
     el.style.top = Math.random() * 60 + 20 + '%';
     // Slight random rotation
-    el.style.transform = otate(deg);
+    const angle = (Math.random() * 6 - 3).toFixed(1);
+    el.style.transform = `rotate(${angle}deg)`;
     
     layer.appendChild(el);
     
@@ -1586,10 +1739,10 @@ function updateMicButton() {
     const btn = document.getElementById('mic-remainder-btn');
     if(!btn) return;
     if (isDictating) {
-        btn.innerHTML = '?? Listening...';
+        btn.innerHTML = '\uD83C\uDFA4 Listening...';
         btn.style.backgroundColor = 'rgba(212, 175, 55, 0.2)';
     } else {
-        btn.innerHTML = '?? Dictate';
+        btn.innerHTML = '\uD83C\uDFA4 Dictate';
         btn.style.backgroundColor = 'transparent';
     }
 }
@@ -1634,7 +1787,7 @@ async function submitDictatedRemainder(text) {
             const btn = document.getElementById('mic-remainder-btn');
             if(btn) {
                 const oldText = btn.innerHTML;
-                btn.innerHTML = '? Injected!';
+                btn.innerHTML = '\u2714 Injected!';
                 setTimeout(() => {
                     updateMicButton(); // Restore state based on isDictating
                 }, 1500);
@@ -1644,4 +1797,142 @@ async function submitDictatedRemainder(text) {
         console.error("Voice injection error:", e);
     }
 }
+
+/* ========================================================= */
+/* COMMAND PALETTE & KEYBOARD SHORTCUTS                      */
+/* ========================================================= */
+
+const COMMANDS = [
+    { id: 'scan', label: 'Capture & Analyze Scene', shortcut: 'S', icon: '\uD83D\uDCF7', action: () => window.triggerSingleScan() },
+    { id: 'ghost', label: 'Toggle Ghost Mode', shortcut: 'G', icon: '\uD83D\uDC7B', action: () => window.toggleGhostMode() },
+    { id: 'bench', label: 'Toggle Bench Camera', shortcut: 'B', icon: '\uD83D\uDD04', action: () => window.toggleBenchCam() },
+    { id: 'assembly', label: 'Enter Assembly Mode', shortcut: 'A', icon: '\uD83D\uDD27', action: () => { if (window.initAssemblyMode) window.initAssemblyMode(window.arSession || []); } },
+    { id: 'search', label: 'Search Archives', shortcut: 'F', icon: '\uD83D\uDD0D', action: () => window.openSearchModal() },
+    { id: 'library', label: 'Open Hardware Library', shortcut: 'L', icon: '\uD83D\uDCDA', action: () => window.openHardwareLibrary() },
+    { id: 'remainder', label: 'Inject Embodied Remainder', shortcut: 'R', icon: '\uD83D\uDCDD', action: () => window.openRemainderModal() },
+    { id: 'dictate', label: 'Toggle Voice Dictation', shortcut: 'V', icon: '\uD83C\uDFA4', action: () => window.toggleDictation() },
+    { id: 'clear', label: 'Clear Session', shortcut: null, icon: '\uD83D\uDDD1', action: () => window.clearSession() },
+    { id: 'export', label: 'Save Session to Database', shortcut: null, icon: '\uD83D\uDCBE', action: () => window.exportSession() },
+    { id: 'guide', label: 'Ask AI Guide', shortcut: null, icon: '\u2726', action: () => window.askGuide() },
+    { id: 'settings', label: 'Configure Pi IP', shortcut: null, icon: '\u2699', action: () => window.promptPiIp() },
+    { id: 'health', label: 'Refresh Health Check', shortcut: 'H', icon: '\uD83D\uDC9A', action: () => checkHealth() },
+    { id: 'field', label: 'Open Field Scanner', shortcut: null, icon: '\uD83D\uDD2C', action: () => window.location.href = 'field.html' },
+    { id: 'vr', label: 'Open VR Mode', shortcut: null, icon: '\uD83E\uDD7D', action: () => window.location.href = 'vr.html' },
+];
+
+let commandPaletteOpen = false;
+
+window.toggleCommandPalette = function() {
+    const palette = document.getElementById('command-palette');
+    if (!palette) return;
+    
+    commandPaletteOpen = !commandPaletteOpen;
+    
+    if (commandPaletteOpen) {
+        palette.style.display = 'flex';
+        const input = document.getElementById('command-search');
+        if (input) {
+            input.value = '';
+            filterCommands('');
+            setTimeout(() => input.focus(), 50);
+        }
+    } else {
+        palette.style.display = 'none';
+    }
+};
+
+function filterCommands(query) {
+    const list = document.getElementById('command-list');
+    if (!list) return;
+    
+    const q = query.toLowerCase();
+    const filtered = q ? COMMANDS.filter(c => c.label.toLowerCase().includes(q) || c.id.includes(q)) : COMMANDS;
+    
+    list.innerHTML = filtered.map((cmd, idx) => `
+        <div class="command-item ${idx === 0 ? 'highlighted' : ''}" 
+             data-cmd-id="${cmd.id}"
+             onclick="executeCommand('${cmd.id}')"
+             onmouseenter="highlightCommand(this)">
+            <span class="command-icon">${cmd.icon}</span>
+            <span class="command-label">${cmd.label}</span>
+            ${cmd.shortcut ? `<span class="command-shortcut">${cmd.shortcut}</span>` : ''}
+        </div>
+    `).join('');
+}
+
+let highlightedIndex = 0;
+
+function highlightCommand(el) {
+    document.querySelectorAll('.command-item').forEach(e => e.classList.remove('highlighted'));
+    el.classList.add('highlighted');
+    highlightedIndex = Array.from(el.parentNode.children).indexOf(el);
+}
+
+window.executeCommand = function(cmdId) {
+    const cmd = COMMANDS.find(c => c.id === cmdId);
+    if (cmd) {
+        window.toggleCommandPalette();
+        cmd.action();
+    }
+};
+
+window.handleCommandInput = function(e) {
+    const items = document.querySelectorAll('.command-item');
+    
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle('highlighted', i === highlightedIndex));
+        items[highlightedIndex]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightedIndex = Math.max(highlightedIndex - 1, 0);
+        items.forEach((el, i) => el.classList.toggle('highlighted', i === highlightedIndex));
+        items[highlightedIndex]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const highlighted = items[highlightedIndex];
+        if (highlighted) {
+            const cmdId = highlighted.getAttribute('data-cmd-id');
+            window.executeCommand(cmdId);
+        }
+    } else if (e.key === 'Escape') {
+        window.toggleCommandPalette();
+    } else {
+        highlightedIndex = 0;
+        filterCommands(e.target.value);
+    }
+};
+
+// Global Keyboard Shortcuts
+document.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') {
+        if (e.key === 'Escape') {
+            document.activeElement.blur();
+            if (commandPaletteOpen) window.toggleCommandPalette();
+        }
+        return;
+    }
+    
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        window.toggleCommandPalette();
+        return;
+    }
+    
+    if (e.key === 'Escape' && commandPaletteOpen) {
+        window.toggleCommandPalette();
+        return;
+    }
+    
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        const cmd = COMMANDS.find(c => c.shortcut && c.shortcut.toLowerCase() === e.key.toLowerCase());
+        if (cmd) {
+            e.preventDefault();
+            cmd.action();
+        }
+    }
+});
+
 
