@@ -86,21 +86,28 @@ export async function initAssemblyMode(activeData = []) {
   try {
       const composeRes = await fetch(`${INFERNO_URL}/api/assembly/generate`, {
           method: "POST",
-          headers: {"Content-Type": "application/json"},
+          headers: {
+            "Content-Type": "application/json",
+            "X-Gemini-Key": localStorage.getItem("gemini_api_key") || ""
+          },
           body: JSON.stringify({ components: dbMatchedParts, goal: goal })
       });
       if (composeRes.ok) {
           const generatedPayload = await composeRes.json();
           document.querySelector('.cards-row').innerHTML = generatedPayload.cards_html;
           assemblySteps = generatedPayload.steps;
+          if (assemblySteps && assemblySteps.length > 0) {
+              applyStep(0);
+          }
       } else {
-          console.error("Failed to generate dynamic assembly steps", await composeRes.text());
+          const errText = await composeRes.text();
+          console.error("Failed to generate dynamic assembly steps", errText);
+          document.querySelector('.cards-row').innerHTML = `<div style="padding: 24px; color: #ff5555; text-align: center;">Error generating assembly steps. The backend API key may be expired or invalid.<br><br>Check the backend terminal for details.</div>`;
       }
   } catch(e) {
       console.warn("Could not compose dynamic steps, check API key", e);
+      document.querySelector('.cards-row').innerHTML = `<div style="padding: 24px; color: #ff5555; text-align: center;">Network error while generating steps.</div>`;
   }
-  
-  applyStep(0);
 }
 
 // Re-generate assembly with updated goal
@@ -122,7 +129,10 @@ window.regenerateAssembly = async function() {
   try {
     const composeRes = await fetch(`${window.location.origin}/api/assembly/generate`, {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gemini-Key": localStorage.getItem("gemini_api_key") || ""
+      },
       body: JSON.stringify({ components: parts, goal: goal })
     });
     if (composeRes.ok) {

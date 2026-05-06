@@ -710,9 +710,9 @@ class AssemblyRequest(BaseModel):
     goal: str = "Connect these components logically for a sensor node."
 
 @app.post("/api/assembly/generate")
-async def generate_assembly(req: AssemblyRequest):
+async def generate_assembly(req: AssemblyRequest, x_gemini_key: Optional[str] = Header(None)):
     """Use Gemini to dynamically generate wiring steps depending on the detected components."""
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = x_gemini_key or os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not set")
         
