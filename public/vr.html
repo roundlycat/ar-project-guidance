@@ -3,34 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Stereoscopic AR HUD</title>
+  <title>WebXR AR HUD</title>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;600&display=swap" rel="stylesheet">
+  
+  <!-- A-Frame Library for Native WebXR & 3D Rendering -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
   <style>
     body, html { 
         margin: 0; padding: 0; width: 100%; height: 100%; 
         background: #000; overflow: hidden; font-family: 'Outfit', sans-serif; 
     }
     
-    .stereoscopic-rig { 
-        display: flex; width: 100%; height: 100%; 
-    }
-    
-    .eye-panel { 
-        flex: 1; position: relative; overflow: hidden; 
-        border-right: 2px solid #050505; /* Separation line for ocular immersion */
-    }
-    
-    /* Center the camera perfectly so both eyes align in hardware */
-    video { 
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-        object-fit: cover; z-index: 1; 
-    }
-    
-    .hud-layer { 
+    /* The overlay must cover the screen but let clicks pass through to A-Frame if needed */
+    #hud-overlay {
         position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
         z-index: 10; display: flex; flex-direction: column; 
         justify-content: center; align-items: center; 
-        pointer-events: none; /* Let clicks pass through */
+        pointer-events: none; 
     }
     
     /* Targeting Reticle */
@@ -47,18 +37,6 @@
         background: #00e5ff; border-radius: 50%; 
         box-shadow: 0 0 8px #00e5ff;
     }
-
-    /* Framing brackets for AI lock-on aesthetic */
-    .brackets {
-        position: absolute; top: 50%; left: 50%;
-        width: 140px; height: 140px; transform: translate(-50%, -50%);
-        border: 2px solid transparent;
-    }
-    .brackets::before, .brackets::after {
-        content: ''; position: absolute; width: 25px; height: 25px; border-color: #00e5ff; border-style: solid;
-    }
-    .brackets::before { top: 0; left: 0; border-width: 3px 0 0 3px; }
-    .brackets::after { bottom: 0; right: 0; border-width: 0 3px 3px 0; }
     
     /* Telemetry Display */
     .telemetry-dashboard { 
@@ -94,55 +72,69 @@
     }
     .connection-badge.connected { color: #00e5ff; border-color: rgba(0,229,255,0.3); }
     .connection-badge.reconnecting { color: #ffd166; border-color: rgba(255,209,102,0.3); animation: flash 1.5s infinite; }
+    
+    /* A hidden video element to keep the CV pipeline alive if getUserMedia still works */
+    #cv-video { display: none; }
   </style>
 </head>
 <body>
 
-<div class="stereoscopic-rig">
-  <!-- LEFT EYE -->
-  <div class="eye-panel" id="left-eye">
-    <video autoplay playsinline muted></video>
-    <div class="hud-layer">
-      <div class="connection-badge" id="left-conn-badge">LINKING...</div>
-      <div class="warning-banner">LINK SEVERED</div>
-      <div class="wireframe-container" id="left-wireframes" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
-      <div class="reticle"></div>
-      <div class="telemetry-dashboard">
-        <div class="temp-readout"><span class="temp">--</span>°C</div>
-        <div class="state-readout">Establishing Uplink...</div>
-      </div>
-    </div>
-  </div>
+<!-- A-Frame Scene configured for WebXR AR mode with Passthrough and DOM Overlay -->
+<a-scene 
+    webxr="optionalFeatures: dom-overlay; overlayElement: #hud-overlay" 
+    background="transparent: true"
+    renderer="alpha: true"
+    vr-mode-ui="enterVRButton: #enter-ar-btn; enterARButton: #enter-ar-btn">
+    
+    <!-- Camera -->
+    <a-entity camera position="0 1.6 0"></a-entity>
+    
+    <!-- 3D Entities will be dynamically injected here later -->
+    <a-entity id="wireframe-layer"></a-entity>
+</a-scene>
 
-  <!-- RIGHT EYE (Identical Duplicate) -->
-  <div class="eye-panel" id="right-eye">
-    <video autoplay playsinline muted></video>
-    <div class="hud-layer">
-      <div class="connection-badge" id="right-conn-badge">LINKING...</div>
-      <div class="warning-banner">LINK SEVERED</div>
-      <div class="wireframe-container" id="right-wireframes" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
-      <div class="reticle"></div>
-      <div class="telemetry-dashboard">
-        <div class="temp-readout"><span class="temp">--</span>°C</div>
-        <div class="state-readout">Establishing Uplink...</div>
-      </div>
-    </div>
+<!-- Custom Enter AR Button -->
+<button id="enter-ar-btn" style="position: absolute; bottom: 40%; left: 50%; transform: translateX(-50%); z-index: 100; padding: 16px 32px; background: #00e5ff; color: #000; border: none; border-radius: 24px; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 1.2rem; cursor: pointer; box-shadow: 0 0 20px rgba(0,229,255,0.4);">
+    Enter AR Passthrough
+</button>
+
+<!-- HUD Overlay (This whole div gets projected over the AR view) -->
+<div id="hud-overlay">
+  <div class="connection-badge" id="conn-badge">LINKING...</div>
+  <div class="warning-banner">LINK SEVERED</div>
+  
+  <div class="wireframe-container" id="2d-wireframes" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
+  
+  <div class="reticle"></div>
+  
+  <div class="telemetry-dashboard">
+    <div class="temp-readout"><span class="temp">--</span>°C</div>
+    <div class="state-readout">Establishing Uplink...</div>
   </div>
 </div>
+
+<video id="cv-video" autoplay playsinline muted></video>
 
 <script>
   let savedPiIp = localStorage.getItem('pi_ip') || window.location.hostname;
   
+  // Hide the enter button once we actually enter AR
+  document.querySelector('a-scene').addEventListener('enter-vr', function () {
+     document.getElementById('enter-ar-btn').style.display = 'none';
+  });
+  document.querySelector('a-scene').addEventListener('exit-vr', function () {
+     document.getElementById('enter-ar-btn').style.display = 'block';
+  });
+
   async function bootOptics() {
     try {
       const constraints = { video: { facingMode: { ideal: "environment" } } };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      document.querySelectorAll('video').forEach(async vid => {
-          vid.srcObject = stream;
-          try { await vid.play(); } catch(err) { console.warn("Auto-play suppressed", err); }
-      });
+      const vid = document.getElementById('cv-video');
+      vid.srcObject = stream;
+      try { await vid.play(); } catch(err) { console.warn("Auto-play suppressed", err); }
     } catch(e) { 
-        alert("Optics Boot Failure: Ensure viewing from HTTPS.\n" + e.message); 
+        console.warn("Optics Boot Failure (expected if Quest blocks it in browser):", e.message); 
     }
   }
   
@@ -169,16 +161,10 @@
     }
   }
 
-  /* 
-     GHOST AR MODE: The heavy physical video stream stays entirely on the Pi Bench.
-     The Web App seamlessly pulls only the ultra-lightweight mathematical JSON wireframes
-     and dynamically paints them perfectly over the phone's native physical camera passthrough!
-  */
   let activeTargetIndex = 0;
   let componentCache = [];
   let dpadPressed = false;
 
-  // Drift Metrics for Haptics
   let latestTracking = [];
   let trackingWs = null;
   let wsReconnectTimer = null;
@@ -235,10 +221,8 @@
   }
 
   function updateConnectionBadge(cls, text) {
-      ['left-conn-badge', 'right-conn-badge'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) { el.className = 'connection-badge ' + cls; el.textContent = text; }
-      });
+      const el = document.getElementById('conn-badge');
+      if (el) { el.className = 'connection-badge ' + cls; el.textContent = text; }
   }
 
   connectTrackingWs();
@@ -246,11 +230,9 @@
   // Xbox Controller / Gamepad API Integration & Haptics
   function pollGamepad() {
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-      // Securely locate the first active slot (Android sometimes assigns BT controllers to slots 1-3)
       const gp = Array.from(gamepads).find(g => g !== null);
       
       if (gp && componentCache.length > 0) {
-          // Detect D-Pad Right (Button 15) or Right Bumper (Button 5)
           const rightPush = gp.buttons[15]?.pressed || gp.buttons[5]?.pressed;
           const leftPush = gp.buttons[14]?.pressed || gp.buttons[4]?.pressed;
           
@@ -264,26 +246,19 @@
               dpadPressed = false;
           }
 
-          // --- UNCERTAINTY HAPTICS ---
-          // Map semantic drift to strong motor (left) and spatial drift to weak motor (right)
           const targetedComp = componentCache[activeTargetIndex];
           if (targetedComp && gp.vibrationActuator) {
               const trackingHit = latestTracking.find(t => t.label === targetedComp.label);
-              
-              // Only apply continuous drift haptics if we have valid tracking data
               if (trackingHit) {
-                  // Semantic heartbeat: pulse magnitude based on semantic drift
                   let semanticMag = Math.min(Math.max(trackingHit.semantic_drift || 0, 0), 1.0);
-                  // Spatial jitter: rapid high-freq magnitude based on spatial drift
                   let spatialMag = Math.min(Math.max(trackingHit.spatial_drift || 0, 0), 1.0);
 
-                  // Apply rumble if drift is non-negligible
                   if (semanticMag > 0.1 || spatialMag > 0.1) {
                       try {
                           gp.vibrationActuator.playEffect("dual-rumble", {
                               startDelay: 0, duration: 50, 
-                              strongMagnitude: semanticMag, // left motor: semantic
-                              weakMagnitude: spatialMag     // right motor: spatial
+                              strongMagnitude: semanticMag, 
+                              weakMagnitude: spatialMag     
                           });
                       } catch(e) {}
                   }
@@ -296,45 +271,18 @@
   function renderWireframeCache() {
       if (!componentCache || componentCache.length === 0) return;
       
-      const video = document.querySelector('video');
-      const panel = document.querySelector('.eye-panel');
-      if (!video || !video.videoWidth) return;
-
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      const pw = panel.clientWidth;
-      const ph = panel.clientHeight;
-      
-      const videoAspect = vw / vh;
-      const panelAspect = pw / ph;
-      
-      let renderedWidth, renderedHeight, offsetX = 0, offsetY = 0;
-      
-      // Calculate exactly how 'object-fit: cover' scaled and cropped the video
-      if (videoAspect > panelAspect) { // Video is wider, crop sides
-          renderedHeight = ph;
-          renderedWidth = ph * videoAspect;
-          offsetX = (renderedWidth - pw) / 2;
-      } else { // Video is taller, crop top/bottom
-          renderedWidth = pw;
-          renderedHeight = pw / videoAspect;
-          offsetY = (renderedHeight - ph) / 2;
-      }
+      // Map 2D predictions to the 2D DOM overlay. 
+      // In a full 3D future, we'd spawn <a-box> entities, but DOM overlay is robust!
+      const pw = window.innerWidth;
+      const ph = window.innerHeight;
       
       const wireframeHTML = componentCache.map((comp, idx) => {
           const box = comp.box || { xmin: 0.1, ymin: 0.1, xmax: 0.3, ymax: 0.3 };
           
-          // Map intrinsic percentage to the dynamically scaled render coordinates
-          const pxLeft = (box.xmin * renderedWidth) - offsetX;
-          const pxTop = (box.ymin * renderedHeight) - offsetY;
-          const pxWidth = (box.xmax - box.xmin) * renderedWidth;
-          const pxHeight = (box.ymax - box.ymin) * renderedHeight;
-          
-          // Convert back into CSS percentages relative to the physical panel
-          const left = (pxLeft / pw) * 100;
-          const top = (pxTop / ph) * 100;
-          const width = (pxWidth / pw) * 100;
-          const height = (pxHeight / ph) * 100;
+          const left = box.xmin * 100;
+          const top = box.ymin * 100;
+          const width = (box.xmax - box.xmin) * 100;
+          const height = (box.ymax - box.ymin) * 100;
           
           const isTargeted = (idx === activeTargetIndex);
           const color = isTargeted ? '#00e5ff' : '#a78bfa';
@@ -352,12 +300,11 @@
           `;
       }).join('');
       
-      document.getElementById('left-wireframes').innerHTML = wireframeHTML;
-      document.getElementById('right-wireframes').innerHTML = wireframeHTML;
+      document.getElementById('2d-wireframes').innerHTML = wireframeHTML;
   }
 
   function captureInternalFrame() {
-      const video = document.querySelector('video');
+      const video = document.getElementById('cv-video');
       if (!video || !video.videoWidth) return null;
       
       const canvas = document.createElement('canvas');
@@ -366,7 +313,6 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // Return raw base64 string stripped of the mime prefix
       return canvas.toDataURL('image/jpeg', 0.8).split(',')[1]; 
   }
 
@@ -383,9 +329,8 @@
       }
       
       const b64Image = captureInternalFrame();
-      if (!b64Image) return; // Wait for camera to boot
+      if (!b64Image) return; 
       
-      // Hit the local HTTPS proxy so it can calculate Epistemic Drift and broadcast it to our Haptics WS!
       const res = await fetch(`/api/camera/analyse`, {
           method: 'POST',
           headers: { 
@@ -418,7 +363,6 @@
   setInterval(syncTelemetry, 2000);
   setInterval(syncGhostWireframes, 5000);
 
-  // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
       clearTimeout(wsReconnectTimer);
       if (trackingWs) trackingWs.close();

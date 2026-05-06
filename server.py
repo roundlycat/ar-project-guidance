@@ -437,8 +437,140 @@ async def session_focus(request: Request):
 
 @app.get("/api/session/search")
 async def session_search(q: str):
-    # Dummy results for frontend
-    return {"results": []}
+    """Full-text search across saved AR sessions — guide responses and component labels."""
+    if not q or len(q) < 2:
+        return {"results": []}
+    try:
+        conn = psycopg2.connect(DB_DSN)
+        cur = conn.cursor()
+        search_term = f"%{q}%"
+        cur.execute("""
+            SELECT session_id, components, guide_response, corrections, created_at
+            FROM ar_sessions
+            WHERE guide_response ILIKE %s
+               OR components::text ILIKE %s
+            ORDER BY created_at DESC
+            LIMIT 20
+        """, (search_term, search_term))
+        rows = cur.fetchall()
+        results = []
+        for r in rows:
+            results.append({
+                "id": str(r[0]),
+                "components": r[1] if r[1] else [],
+                "guide_response": r[2] or "",
+                "corrections": r[3] if r[3] else [],
+                "timestamp": r[4].isoformat() if r[4] else None
+            })
+        cur.close()
+        conn.close()
+        log.info(f"Session search for '{q}' returned {len(results)} results.")
+        return {"results": results}
+    except Exception as e:
+        log.error(f"Session search error: {e}")
+        return {"results": []}
+
+
+@app.get("/api/session/history")
+async def session_history(limit: int = 20):
+    """Return recent AR sessions for the session history viewer."""
+    try:
+        conn = psycopg2.connect(DB_DSN)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT session_id, components, guide_response, corrections, created_at
+            FROM ar_sessions
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (min(limit, 50),))
+        rows = cur.fetchall()
+        sessions = []
+        for r in rows:
+            comps = r[1] if r[1] else []
+            comp_count = len(comps) if isinstance(comps, list) else 0
+            # Extract component labels for the summary
+            labels = []
+            if isinstance(comps, list):
+                for c in comps:
+                    if isinstance(c, dict) and 'label' in c:
+                        labels.append(c['label'])
+            sessions.append({
+                "id": str(r[0]),
+                "component_count": comp_count,
+                "component_labels": labels[:6],
+                "has_guide": bool(r[2]),
+                "corrections_count": len(r[3]) if r[3] else 0,
+                "timestamp": r[4].isoformat() if r[4] else None
+            })
+        cur.close()
+        conn.close()
+        return {"sessions": sessions, "total": len(sessions)}
+    except Exception as e:
+        log.error(f"Session history error: {e}")
+        return {"sessions": [], "total": 0}
+
+
+@app.get("/api/session/{session_id}")
+async def get_session_detail(session_id: str):
+    """Return full detail for a specific AR session."""
+    try:
+        conn = psycopg2.connect(DB_DSN)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT session_id, components, guide_response, corrections, created_at
+            FROM ar_sessions WHERE session_id = %s
+        """, (session_id,))
+        r = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not r:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return {
+            "id": str(r[0]),
+            "components": r[1] if r[1] else [],
+            "guide_response": r[2] or "",
+            "corrections": r[3] if r[3] else [],
+            "timestamp": r[4].isoformat() if r[4] else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Session detail error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/remainders/recent")
+async def recent_remainders(limit: int = 10):
+    """Return recent embodied remainders injected by the human operator."""
+    try:
+        conn = psycopg2.connect(DB_DSN)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT si.id, si.sensor_id, si.embodied_remainder, si.created_at,
+                   isrc.source_name
+            FROM sensor_interpretation si
+            LEFT JOIN interpretation_source isrc ON si.source_id = isrc.id
+            WHERE si.embodied_remainder IS NOT NULL
+              AND si.embodied_remainder != ''
+            ORDER BY si.created_at DESC
+            LIMIT %s
+        """, (min(limit, 30),))
+        rows = cur.fetchall()
+        remainders = []
+        for r in rows:
+            remainders.append({
+                "id": str(r[0]),
+                "sensor_id": r[1],
+                "note": r[2],
+                "timestamp": r[3].isoformat() if r[3] else None,
+                "source": r[4] or "unknown"
+            })
+        cur.close()
+        conn.close()
+        return {"remainders": remainders, "total": len(remainders)}
+    except Exception as e:
+        log.error(f"Recent remainders error: {e}")
+        return {"remainders": [], "total": 0}
 
 @app.post("/api/guide/save")
 async def guide_save(request: Request):

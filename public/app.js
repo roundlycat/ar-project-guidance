@@ -1935,4 +1935,112 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// =========================================================
+// ARCHIVE & KNOWLEDGE RETRIEVAL SYSTEM
+// =========================================================
 
+window.openSearchModal = function() {
+    document.getElementById('search-modal').style.display = 'flex';
+    window.switchArchiveTab('search');
+    setTimeout(() => document.getElementById('search-input')?.focus(), 100);
+};
+
+window.switchArchiveTab = function(tabId) {
+    document.querySelectorAll('#search-modal .mode-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+    
+    document.getElementById('archive-view-search').style.display = 'none';
+    document.getElementById('archive-view-history').style.display = 'none';
+    document.getElementById('archive-view-remainders').style.display = 'none';
+    
+    document.getElementById('archive-view-' + tabId).style.display = 'block';
+    
+    if (tabId === 'history') window.loadHistory();
+    if (tabId === 'remainders') window.loadRemainders();
+};
+
+window.performSearch = async function() {
+    const q = document.getElementById('search-input').value.trim();
+    if (!q) return;
+    
+    const resultsContainer = document.getElementById('search-results');
+    resultsContainer.innerHTML = '<div class="loader" style="margin: 20px auto;"><div class="bounce1"></div><div class="bounce2"></div><div class="bounce3"></div></div>';
+    
+    try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/session/search?q=${encodeURIComponent(q)}`);
+        if (!res.ok) throw new Error("Search failed");
+        
+        const data = await res.json();
+        
+        if (!data.results || data.results.length === 0) {
+            resultsContainer.innerHTML = '<div style="text-align:center; color:#a3a3a3;">No matching sessions found.</div>';
+            return;
+        }
+        
+        resultsContainer.innerHTML = data.results.map(r => `
+            <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(0,229,255,0.2); padding: 16px; border-radius: 8px;">
+                <div style="font-size: 0.8em; color: #a3a3a3; margin-bottom: 8px;">${new Date(r.timestamp).toLocaleString()}</div>
+                <div style="font-family: monospace; color: #00e5ff; margin-bottom: 8px;">Components: ${(r.components || []).map(c=>c.label).join(', ')}</div>
+                <div style="color: #ececec; font-size: 0.95em;">${r.guide_response || 'No guide interaction'}</div>
+            </div>
+        `).join('');
+    } catch (e) {
+        resultsContainer.innerHTML = `<div style="color:#ff5252; text-align:center;">Error: ${e.message}</div>`;
+    }
+};
+
+window.loadHistory = async function() {
+    const resultsContainer = document.getElementById('history-results');
+    resultsContainer.innerHTML = '<div class="loader" style="margin: 20px auto;"><div class="bounce1"></div><div class="bounce2"></div><div class="bounce3"></div></div>';
+    
+    try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/session/history`);
+        if (!res.ok) throw new Error("History failed");
+        
+        const data = await res.json();
+        
+        if (!data.sessions || data.sessions.length === 0) {
+            resultsContainer.innerHTML = '<div style="text-align:center; color:#a3a3a3;">No past sessions found.</div>';
+            return;
+        }
+        
+        resultsContainer.innerHTML = data.sessions.map(s => `
+            <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); padding: 16px; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 0.85em; color: #a3a3a3;">${new Date(s.timestamp).toLocaleString()}</span>
+                    <span style="font-size: 0.85em; background: rgba(0,229,255,0.2); color: #00e5ff; padding: 2px 6px; border-radius: 4px;">${s.component_count} parts</span>
+                </div>
+                <div style="font-family: monospace; color: #ececec;">${s.component_labels.join(', ') || 'Empty scene'}</div>
+                ${s.has_guide ? '<div style="margin-top: 8px; font-size: 0.8em; color: #d8b4fe;">✦ Includes AI Guide interaction</div>' : ''}
+            </div>
+        `).join('');
+    } catch (e) {
+        resultsContainer.innerHTML = `<div style="color:#ff5252; text-align:center;">Error: ${e.message}</div>`;
+    }
+};
+
+window.loadRemainders = async function() {
+    const resultsContainer = document.getElementById('remainders-results');
+    resultsContainer.innerHTML = '<div class="loader" style="margin: 20px auto;"><div class="bounce1"></div><div class="bounce2"></div><div class="bounce3"></div></div>';
+    
+    try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/remainders/recent`);
+        if (!res.ok) throw new Error("Remainders failed");
+        
+        const data = await res.json();
+        
+        if (!data.remainders || data.remainders.length === 0) {
+            resultsContainer.innerHTML = '<div style="text-align:center; color:#a3a3a3;">No embodied remainders found.</div>';
+            return;
+        }
+        
+        resultsContainer.innerHTML = data.remainders.map(r => `
+            <div style="background: linear-gradient(135deg, rgba(20,25,40,0.6) 0%, rgba(212, 175, 55, 0.1) 100%); border: 1px solid rgba(212, 175, 55, 0.4); padding: 16px; border-radius: 8px;">
+                <div style="font-size: 0.8em; color: #d4af37; margin-bottom: 8px;">${new Date(r.timestamp).toLocaleString()} • ${r.source}</div>
+                <div style="color: #f1c40f; font-style: italic; font-size: 1.05em;">"${r.note}"</div>
+            </div>
+        `).join('');
+    } catch (e) {
+        resultsContainer.innerHTML = `<div style="color:#ff5252; text-align:center;">Error: ${e.message}</div>`;
+    }
+};

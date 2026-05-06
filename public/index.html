@@ -34,6 +34,8 @@
     <img id="bench-cam-stream" alt="Bench Cam Stream" class="hidden" crossorigin="anonymous">
     <canvas id="thermal-overlay" class="hidden"></canvas>
   </div>
+  
+  <div id="ambient-particles" class="ambient-particles"></div>
 
   <!-- Palimpsest Layer - Ghosted embodied remainders float here -->
   <div id="palimpsest-overlay" class="palimpsest-layer"></div>
@@ -180,15 +182,13 @@
             <polyline points="2 12 12 17 22 12"></polyline>
           </svg>
         </button>
-        <!-- 
-        <button class="settings-btn" id="search-archives-btn" title="Search Knowledge Archives" onclick="openSearchModal()">
+        <button class="settings-btn" id="search-archives-btn" title="Search Knowledge Archives" onclick="window.openSearchModal()">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
         </button>
-        -->
         <button class="settings-btn" id="ghost-toggle" title="Toggle Ghost Mode / Transparency"
           onclick="toggleGhostMode()">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor"
@@ -244,6 +244,13 @@
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-camera">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
             <circle cx="12" cy="13" r="4"></circle>
+          </svg>
+        </button>
+
+        <button class="settings-btn" id="auth-btn" title="Sign In">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-user">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
           </svg>
         </button>
       </div>
@@ -326,13 +333,31 @@
   <!-- Search Archives Modal -->
   <div id="search-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); flex-direction: column; padding: 24px; box-sizing: border-box; justify-content: flex-start; align-items: center; pointer-events: auto;">
       <div style="background: rgba(25, 25, 35, 1); border: 2px solid #00e5ff; border-radius: 16px; padding: 24px; max-height: 85vh; width: 95%; max-width: 650px; overflow-y: auto; color: #ececec; line-height: 1.6; box-shadow: 0 15px 50px rgba(0,0,0,0.9); margin-top: 5vh; display: flex; flex-direction: column;">
-        <h3 style="margin-top: 0; color: #00e5ff; font-weight: 600; font-size: 1.5em; text-align: center;">Archive Retrieval</h3>
-        <div style="display: flex; gap: 8px; margin-top: 16px; margin-bottom: 16px;">
-            <input type="text" id="search-input" placeholder="Search topics, labels, advice..." style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #4db8ff; background: rgba(0,0,0,0.5); color: white; font-size: 1em;" onkeydown="if(event.key === 'Enter') window.performSearch()">
-            <button onclick="window.performSearch()" class="action-btn primary" style="width: auto; padding: 12px 20px;">Search</button>
+        <h3 style="margin-top: 0; color: #00e5ff; font-weight: 600; font-size: 1.5em; text-align: center;">Knowledge Archives</h3>
+        
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+            <button class="mode-tab active" id="tab-search" onclick="window.switchArchiveTab('search')" style="flex:1;">Search</button>
+            <button class="mode-tab" id="tab-history" onclick="window.switchArchiveTab('history')" style="flex:1;">History</button>
+            <button class="mode-tab" id="tab-remainders" onclick="window.switchArchiveTab('remainders')" style="flex:1;">Remainders</button>
         </div>
-        <div id="search-results" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;"></div>
-        <button class="action-btn outline" style="width: 100%; font-size: 1.1em; padding: 14px;" onclick="document.getElementById('search-modal').style.display = 'none';">Close</button>
+
+        <div id="archive-view-search">
+            <div style="display: flex; gap: 8px; margin-top: 8px; margin-bottom: 16px;">
+                <input type="text" id="search-input" placeholder="Search topics, labels, advice..." style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #4db8ff; background: rgba(0,0,0,0.5); color: white; font-size: 1em;" onkeydown="if(event.key === 'Enter') window.performSearch()">
+                <button onclick="window.performSearch()" class="action-btn primary" style="width: auto; padding: 12px 20px;">Search</button>
+            </div>
+            <div id="search-results" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;"></div>
+        </div>
+
+        <div id="archive-view-history" style="display: none;">
+            <div id="history-results" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;"></div>
+        </div>
+
+        <div id="archive-view-remainders" style="display: none;">
+            <div id="remainders-results" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;"></div>
+        </div>
+
+        <button class="action-btn outline" style="width: 100%; font-size: 1.1em; padding: 14px; margin-top: auto;" onclick="document.getElementById('search-modal').style.display = 'none';">Close</button>
       </div>
   </div>
 
@@ -398,6 +423,7 @@
   </div>
 
   <!-- Main App Scripts -->
+  <script type="module" src="auth.js?v=1"></script>
   <script type="module" src="wireframe-integration.js?v=7"></script>
   <script type="module">
     import { initAssemblyMode } from './assembly.js?v=3';
